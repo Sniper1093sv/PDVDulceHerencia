@@ -1,0 +1,364 @@
+/* Variables de colores - tema panadería */
+:root {
+    --color-primario: #8B4513;    /* Marrón madera */
+    --color-secundario: #D2691E;   /* Naranja quemado */
+    --color-fondo: #FFF8E7;         /* Crema suave */
+    --color-texto: #4A4A4A;
+    --color-exito: #2E7D32;
+    --color-peligro: #C62828;
+    --color-info: #1976D2;
+    --sombra: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f5f5;
+    color: var(--color-texto);
+}
+
+.app-container {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    background-color: white;
+    box-shadow: var(--sombra);
+}
+
+/* Encabezado */
+.header {
+    background: linear-gradient(135deg, var(--color-primario), var(--color-secundario));
+    color: white;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logo-img {
+    height: 50px;
+    width: auto;
+}
+
+.logo h1 {
+    font-size: 1.8rem;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.user-info {
+    font-size: 1rem;
+    background-color: rgba(255,255,255,0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+}
+
+/* Menú principal */
+.main-menu {
+    background-color: white;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 1rem;
+    box-shadow: var(--sombra);
+    z-index: 10;
+}
+
+.menu-btn {
+    background-color: transparent;
+    border: none;
+    padding: 0.8rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    color: var(--color-texto);
+    flex: 1 1 auto;
+    min-width: 100px;
+    justify-content: center;
+}
+
+.menu-btn:hover {
+    background-color: var(--color-fondo);
+    transform: translateY(-2px);
+}
+
+.menu-btn.active {
+    background: linear-gradient(135deg, var(--color-primario), var(--color-secundario));
+    color: white;
+}
+
+.menu-btn .icon {
+    font-size: 1.2rem;
+}
+
+/* Contenido principal */
+.content {
+    padding: 2rem;
+    background-color: var(--color-fondo);
+    min-height: 400px;
+}
+
+.module {
+    display: none;
+}
+
+.module.active {
+    display: block;
+}
+
+/* Cards */
+.cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.card {
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: var(--sombra);
+    transition: transform 0.3s;
+}
+
+.card:hover {
+    transform: scale(1.02);
+}
+
+.card h3 {
+    color: var(--color-primario);
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--color-fondo);
+    padding-bottom: 0.5rem;
+}
+
+/* Formularios */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+}
+
+.form-group input, 
+.form-group select, 
+.form-group textarea {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--color-primario);
+}
+
+.btn {
+    background-color: var(--color-primario);
+    color: white;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+}
+
+.btn:hover {
+    background-color: var(--color-secundario);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-danger {
+    background-color: var(--color-peligro);
+}
+
+.btn-success {
+    background-color: var(--color-exito);
+}
+
+.btn-info {
+    background-color: var(--color-info);
+}
+
+/* Tablas */
+.table-container {
+    overflow-x: auto;
+    margin-top: 1rem;
+    background: white;
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th {
+    background-color: var(--color-primario);
+    color: white;
+    padding: 1rem;
+    text-align: left;
+}
+
+table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+table tr:hover {
+    background-color: #f9f9f9;
+}
+
+table tfoot td {
+    background-color: #f0f0f0;
+    font-weight: bold;
+}
+
+/* Tarjetas de resumen */
+.total-card {
+    background: linear-gradient(135deg, #8B4513, #D2691E);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: var(--sombra);
+    transition: transform 0.3s;
+}
+
+.total-card:hover {
+    transform: scale(1.02);
+}
+
+.total-card .label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.total-card .value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin: 0.5rem 0;
+}
+
+.total-card .subtitle {
+    font-size: 0.8rem;
+    margin: 0;
+    opacity: 0.8;
+}
+
+/* Precios altos */
+.precio-alto {
+    font-weight: bold;
+    color: #8B4513;
+}
+
+/* Notificaciones */
+.notificacion {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Pie de página */
+.footer {
+    background-color: #333;
+    color: white;
+    text-align: center;
+    padding: 1rem;
+    font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
+    
+    .logo {
+        flex-direction: column;
+    }
+    
+    .logo h1 {
+        font-size: 1.2rem;
+    }
+    
+    .main-menu {
+        flex-direction: column;
+    }
+    
+    .menu-btn {
+        width: 100%;
+    }
+    
+    .content {
+        padding: 1rem;
+    }
+    
+    .cards-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Estilos para el modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panadería Dulce Herencia</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Encabezado -->
+        <header class="header">
+            <div class="logo">
+                <img src="assets/logo.png" alt="Dulce Herencia" class="logo-img" onerror="this.style.display='none'">
+                <h1>🧁 Panadería Dulce Herencia 🥖</h1>
+            </div>
+            <div class="user-info">
+                <span>Bienvenido, Admin</span>
+            </div>
+        </header>
+
+        <!-- Menú principal -->
+        <nav class="main-menu">
+            <button class="menu-btn active" data-module="inicio">
+                <span class="icon">🏠</span>
+                <span>Inicio</span>
+            </button>
+            <button class="menu-btn" data-module="punto-venta">
+                <span class="icon">🛒</span>
+                <span>Punto de Venta</span>
+            </button>
+            <button class="menu-btn" data-module="historial-ventas">
+                <span class="icon">📋</span>
+                <span>Historial Ventas</span>
+            </button>
+            <button class="menu-btn" data-module="instrumentos">
+                <span class="icon">🛠️</span>
+                <span>Instrumentos</span>
+            </button>
+            <button class="menu-btn" data-module="empleados">
+                <span class="icon">👥</span>
+                <span>Empleados</span>
+            </button>
+            <button class="menu-btn" data-module="productos">
+                <span class="icon">🥐</span>
+                <span>Productos</span>
+            </button>
+            <button class="menu-btn" data-module="ganancias">
+                <span class="icon">📊</span>
+                <span>Ganancias</span>
+            </button>
+            <button class="menu-btn" data-module="materia-prima">
+                <span class="icon">📦</span>
+                <span>Materia Prima</span>
+            </button>
+            <button class="menu-btn" data-module="graficas">
+                <span class="icon">📈</span>
+                <span>Gráficas</span>
+            </button>
+            <button class="menu-btn" data-module="salir" id="btn-salir">
+                <span class="icon">🚪</span>
+                <span>Salir</span>
+            </button>
+        </nav>
+
+        <!-- Contenido principal (cambiará según el módulo) -->
+        <main id="contenido-principal" class="content">
+            <!-- Módulo Inicio -->
+            <div id="inicio" class="module active">
+                <h2>Panel de Control</h2>
+                <p>Bienvenido al sistema de gestión de tu panadería. Selecciona un módulo del menú para comenzar.</p>
+                <div class="cards-container" id="inicio-resumen">
+                    <!-- Se llenará con JavaScript -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Pie de página -->
+        <footer class="footer">
+            <p>&copy; 2026 Panadería Dulce Herencia - Sistema de Gestión</p>
+        </footer>
+    </div>
+
+    <!-- PRIMERO: Script principal (funciones globales) -->
+    <script src="script.js"></script>
+
+    <!-- SEGUNDO: Módulos de sistema (base de datos y exportación) -->
+    <script src="modules/database.js"></script>
+    <script src="modules/exportador.js"></script>
+
+    <!-- TERCERO: Módulos de negocio (ordenados por dependencia) -->
+    <script src="modules/productos.js"></script>      <!-- Base para ventas -->
+    <script src="modules/instrumentos.js"></script>
+    <script src="modules/empleados.js"></script>
+    <script src="modules/materia_prima.js"></script>
+    <script src="modules/punto_venta.js"></script>    <!-- Depende de productos -->
+    <script src="modules/ventas.js"></script>         <!-- Historial -->
+    <script src="modules/ganancias.js"></script>      <!-- Depende de ventas -->
+    <script src="modules/graficas.js"></script>       <!-- Depende de ventas -->
+
+    <!-- Botón de reseteo seguro (al final para asegurar que el DOM cargó) -->
+    <div style="position: fixed; bottom: 10px; right: 10px; opacity: 0.2; z-index: 9999;">
+        <button id="resetSecreto" style="padding: 5px 10px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" title="Mantén Ctrl+Shift y haz clic para resetear">
+            🔄 RESET (Seguro)
+        </button>
+    </div>
+
+    <script>
+        // Botón de reseteo seguro (requiere Ctrl+Shift+Click)
+        document.addEventListener('DOMContentLoaded', function() {
+            const resetBtn = document.getElementById('resetSecreto');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function(e) {
+                    if (e.ctrlKey && e.shiftKey) {
+                        if (confirm('🔥 ¿RESETEAR COMPLETAMENTE TODOS LOS DATOS?\n\nSe borrarán ventas, productos, empleados, inversiones...')) {
+                            if (confirm('⚠️ ÚLTIMA OPORTUNIDAD: ¿Estás ABSOLUTAMENTE seguro?')) {
+                                console.log('🔥 INICIANDO RESETEO TOTAL...');
+                                
+                                // Lista de todas las claves de localStorage
+                                const claves = [
+                                    'ventas', 'productos', 'instrumentos', 'empleados', 
+                                    'materiaPrima', 'metas', 'inversiones', 'carrito'
+                                ];
+                                
+                                // Borrar localStorage específico
+                                claves.forEach(key => {
+                                    localStorage.removeItem(key);
+                                    console.log(`✅ Eliminado: ${key}`);
+                                });
+                                
+                                // Borrar todo el localStorage por si acaso
+                                localStorage.clear();
+                                
+                                // Eliminar IndexedDB
+                                if (window.indexedDB) {
+                                    const request = indexedDB.deleteDatabase('DulceHerenciaDB');
+                                    request.onsuccess = () => {
+                                        alert('✅ TODOS LOS DATOS HAN SIDO ELIMINADOS\n\nLa página se recargará.');
+                                        location.reload();
+                                    };
+                                    request.onerror = () => {
+                                        alert('⚠️ Datos de localStorage borrados. Recargando...');
+                                        location.reload();
+                                    };
+                                } else {
+                                    alert('✅ Datos borrados. Recargando...');
+                                    location.reload();
+                                }
+                            }
+                        }
+                    } else {
+                        alert('🔒 Botón de seguridad: Mantén presionada la tecla Ctrl y Shift mientras haces clic');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
