@@ -1,8 +1,8 @@
 /* Variables de colores - tema panadería */
 :root {
-    --color-primario: #8B4513;    /* Marrón madera */
-    --color-secundario: #D2691E;   /* Naranja quemado */
-    --color-fondo: #FFF8E7;         /* Crema suave */
+    --color-primario: #7B1103;    /* Marrón madera */
+    --color-secundario: #490a02;   /* Naranja quemado */
+    --color-fondo: #ffd8ac;         /* Crema suave */
     --color-texto: #4A4A4A;
     --color-exito: #2E7D32;
     --color-peligro: #C62828;
@@ -36,7 +36,7 @@ body {
 .header {
     background: linear-gradient(135deg, var(--color-primario), var(--color-secundario));
     color: white;
-    padding: 1rem 2rem;
+    padding: 1rem 35rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
