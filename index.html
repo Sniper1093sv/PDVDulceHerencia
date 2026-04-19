@@ -13,11 +13,7 @@
         <header class="header">
             <div class="logo">
                 <img src="assets/logoB.svg" alt="Dulce Herencia" class="logo-img" onerror="this.style.display='none'">
-                <!--<h1>CONTROL DE VENTAS</h1>-->
             </div>
-            <!--<div class="user-info">
-                <span>Bienvenido, Admin</span>
-            </div>-->
         </header>
 
         <!-- Menú principal -->
@@ -64,14 +60,15 @@
             </button>
         </nav>
 
-        <!-- Contenido principal (cambiará según el módulo) -->
+        <!-- Contenido principal -->
         <main id="contenido-principal" class="content">
-            <!-- Módulo Inicio -->
             <div id="inicio" class="module active">
                 <h2>Panel de Control</h2>
-                <p>Bienvenido al sistema de gestión de tu panadería. Selecciona un módulo del menú para comenzar.</p>
+                <p>Conectando con Supabase...</p>
                 <div class="cards-container" id="inicio-resumen">
-                    <!-- Se llenará con JavaScript -->
+                    <div class="card" style="grid-column: 1/-1; text-align: center;">
+                        <h3>🔄 Cargando datos...</h3>
+                    </div>
                 </div>
             </div>
         </main>
@@ -82,43 +79,123 @@
         </footer>
     </div>
 
-    <!-- Script de Supabase (CDN) -->
+    <!-- ============================================= -->
+    <!-- SECCIÓN CRÍTICA: ORDEN DE CARGA DE SCRIPTS     -->
+    <!-- ============================================= -->
+    
+    <!-- 1. Biblioteca de Supabase (DEBE SER LA PRIMERA) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    
+    <!-- 2. Script principal (funciones globales) -->
+    <script src="script.js"></script>
+    
+    <!-- 3. Inicializar Supabase inmediatamente -->
     <script>
-        // Exponer la función createClient globalmente
-        window.supabaseCreateClient = supabase.createClient;
-        console.log('📦 Biblioteca Supabase cargada');
+        console.log('🚀 Inicializando Supabase...');
+        
+        // Credenciales de Supabase
+        const SUPABASE_URL = 'https://rzqbakmqcpajyhxvukyi.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6cWJha21xY3BhanloeHZ1a3lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1MzMxNDEsImV4cCI6MjA5MjEwOTE0MX0.9iAhcpsrWLLC9-HQYkTxk1ifp32svVCTUcB6lxnvMkA';
+        
+        // Crear cliente de Supabase
+        let supabaseClient = null;
+        
+        if (typeof supabase !== 'undefined' && supabase.createClient) {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('✅ Cliente Supabase creado correctamente');
+        } else {
+            console.error('❌ Error: Biblioteca de Supabase no disponible');
+        }
+        
+        // Exponer el cliente globalmente
+        window.supabaseClient = {
+            getClient: function() { return supabaseClient; },
+            isReady: function() { return supabaseClient !== null; }
+        };
+        
+        console.log('📦 Cliente Supabase expuesto globalmente. ¿Listo?', window.supabaseClient.isReady());
+    </script>
+    
+    <!-- 4. Cargar módulos SOLO cuando Supabase esté listo -->
+    <script>
+        (async function cargarModulos() {
+            console.log('⏳ Verificando conexión a Supabase antes de cargar módulos...');
+            
+            // Esperar hasta 5 segundos a que Supabase esté listo
+            let intentos = 0;
+            const maxIntentos = 50; // 5 segundos
+            
+            while (!window.supabaseClient?.isReady() && intentos < maxIntentos) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                intentos++;
+            }
+            
+            if (!window.supabaseClient?.isReady()) {
+                console.error('❌ No se pudo conectar con Supabase después de 5 segundos');
+                document.querySelector('#inicio-resumen').innerHTML = `
+                    <div class="card" style="grid-column: 1/-1; text-align: center; background: #ffebee;">
+                        <h3 style="color: #C62828;">❌ Error de conexión</h3>
+                        <p>No se pudo conectar con Supabase. Verifica tu conexión a internet.</p>
+                        <button class="btn btn-info" onclick="location.reload()">🔄 Reintentar</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            console.log('✅ Supabase listo. Cargando módulos...');
+            
+            // Lista de módulos en orden de dependencia
+            const modulos = [
+                'modules/database.js',
+                'modules/exportador.js',
+                'modules/productos.js',
+                'modules/instrumentos.js',
+                'modules/empleados.js',
+                'modules/materia_prima.js',
+                'modules/ventas.js',
+                'modules/punto_venta.js',
+                'modules/ganancias.js',
+                'modules/graficas.js'
+            ];
+            
+            // Cargar cada módulo secuencialmente
+            for (const modulo of modulos) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = modulo;
+                    script.onload = () => {
+                        console.log(`   📄 ${modulo} cargado`);
+                        resolve();
+                    };
+                    script.onerror = () => {
+                        console.error(`   ❌ Error cargando ${modulo}`);
+                        resolve(); // Continuar con el siguiente aunque falle
+                    };
+                    document.body.appendChild(script);
+                });
+            }
+            
+            console.log('✅ Todos los módulos cargados');
+            
+            // Actualizar el panel de inicio
+            setTimeout(() => {
+                const inicioBtn = document.querySelector('[data-module="inicio"]');
+                if (inicioBtn) {
+                    inicioBtn.click();
+                }
+            }, 500);
+        })();
     </script>
 
-    <!-- PRIMERO: Script principal (funciones globales) -->
-    <script src="script.js"></script>
-
-    <!-- SEGUNDO: Cliente de Supabase -->
-    <script src="modules/supabaseClient.js"></script>
-
-    <!-- TERCERO: Módulos de sistema (base de datos y exportación) -->
-    <script src="modules/database.js"></script>
-    <script src="modules/exportador.js"></script>
-
-    <!-- CUARTO: Módulos de negocio (ordenados por dependencia) -->
-    <script src="modules/productos.js"></script>      <!-- Base para ventas -->
-    <script src="modules/instrumentos.js"></script>
-    <script src="modules/empleados.js"></script>
-    <script src="modules/materia_prima.js"></script>
-    <script src="modules/ventas.js"></script>    <!-- Depende de productos -->
-    <script src="modules/punto_venta.js"></script>         <!-- Historial -->
-    <script src="modules/ganancias.js"></script>      <!-- Depende de ventas -->
-    <script src="modules/graficas.js"></script>       <!-- Depende de ventas -->
-
-    <!-- Botón de reseteo seguro (al final para asegurar que el DOM cargó) -->
+    <!-- Botón de reseteo seguro -->
     <div style="position: fixed; bottom: 10px; right: 10px; opacity: 0.2; z-index: 9999;">
         <button id="resetSecreto" style="padding: 5px 10px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" title="Mantén Ctrl+Shift y haz clic para resetear">
-            🔄 RESET (Seguro)
+            🔄 RESET
         </button>
     </div>
 
     <script>
-        // Botón de reseteo seguro (requiere Ctrl+Shift+Click)
+        // Botón de reseteo seguro (Ctrl+Shift+Click)
         document.addEventListener('DOMContentLoaded', function() {
             const resetBtn = document.getElementById('resetSecreto');
             if (resetBtn) {
@@ -126,9 +203,6 @@
                     if (e.ctrlKey && e.shiftKey) {
                         if (confirm('🔥 ¿RESETEAR COMPLETAMENTE TODOS LOS DATOS?\n\nSe borrarán TODOS los datos de Supabase.')) {
                             if (confirm('⚠️ ÚLTIMA OPORTUNIDAD: ¿Estás ABSOLUTAMENTE seguro?')) {
-                                console.log('🔥 INICIANDO RESETEO TOTAL...');
-                                
-                                // Resetear Supabase
                                 const client = window.supabaseClient?.getClient();
                                 if (client) {
                                     try {
@@ -138,30 +212,20 @@
                                         await client.from('empleados').delete().neq('id', 0);
                                         await client.from('materia_prima').delete().neq('id', 0);
                                         await client.from('inversiones').delete().neq('id', 0);
+                                        await client.from('metas').upsert({ id: 1, diaria: 100, quincenal: 1500, mensual: 2500 });
                                         
-                                        // Resetear metas a valores por defecto
-                                        await client.from('metas').upsert({ 
-                                            id: 1, 
-                                            diaria: 100, 
-                                            quincenal: 1500, 
-                                            mensual: 2500 
-                                        });
-                                        
-                                        alert('✅ TODOS LOS DATOS DE SUPABASE HAN SIDO ELIMINADOS\n\nLa página se recargará.');
+                                        alert('✅ DATOS RESETEADOS\n\nLa página se recargará.');
                                         location.reload();
                                     } catch (err) {
-                                        console.error('Error reseteando Supabase:', err);
-                                        alert('⚠️ Error al resetear Supabase. Recargando...');
-                                        location.reload();
+                                        alert('⚠️ Error al resetear: ' + err.message);
                                     }
                                 } else {
-                                    alert('⚠️ Cliente Supabase no disponible. Recargando...');
-                                    location.reload();
+                                    alert('❌ Cliente Supabase no disponible');
                                 }
                             }
                         }
                     } else {
-                        alert('🔒 Botón de seguridad: Mantén presionada la tecla Ctrl y Shift mientras haces clic');
+                        alert('🔒 Mantén Ctrl+Shift y haz clic para resetear');
                     }
                 });
             }
