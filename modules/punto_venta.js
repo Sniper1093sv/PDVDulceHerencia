@@ -1,37 +1,137 @@
-// modules/punto_venta.js - Punto de Venta para registrar ventas diarias
+// modules/punto_venta.js - Punto de Venta con Supabase
 
 let carrito = [];
 let catalogoProductos = [];
 
-// Cargar productos disponibles
-function cargarProductosPDV() {
-    const prodData = localStorage.getItem('productos');
-    if (prodData) {
-        try {
-            catalogoProductos = JSON.parse(prodData);
-        } catch (e) {
-            console.error('Error cargando productos:', e);
+// Cargar productos disponibles desde Supabase
+async function cargarProductosPDV() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        catalogoProductos = [];
+        return;
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('productos')
+            .select('*')
+            .order('nombre', { ascending: true });
+        
+        if (error) {
+            console.error('Error cargando productos:', error);
             catalogoProductos = [];
+            return;
         }
-    } else {
+        
+        catalogoProductos = (data || []).map(p => {
+            // Parsear presentaciones si es string
+            let presentaciones = p.presentaciones;
+            try {
+                if (typeof presentaciones === 'string') {
+                    presentaciones = JSON.parse(presentaciones);
+                }
+            } catch (e) {
+                presentaciones = [];
+            }
+            
+            return {
+                ...p,
+                presentaciones: presentaciones
+            };
+        });
+        
+        console.log(`✅ ${catalogoProductos.length} productos cargados para PDV`);
+    } catch (e) {
+        console.error('Error cargando productos:', e);
         catalogoProductos = [];
     }
 }
 
-// Función para mostrar el Punto de Venta
-function mostrarPuntoVenta() {
-    cargarProductosPDV();
+// Cargar metas desde Supabase
+async function cargarMetasPDV() {
+    const client = window.supabaseClient?.getClient();
     
-    const totalCarrito = carrito.reduce((sum, item) => sum + (item.total || 0), 0);
+    if (!client) {
+        return { diaria: 100, quincenal: 1500, mensual: 2500 };
+    }
     
-    const metas = JSON.parse(localStorage.getItem('metas') || '{"diaria":100}');
-    const metaDiaria = metas.diaria || 100;
+    try {
+        const { data, error } = await client
+            .from('metas')
+            .select('*')
+            .eq('id', 1)
+            .single();
+        
+        if (error) {
+            console.error('Error cargando metas:', error);
+            return { diaria: 100, quincenal: 1500, mensual: 2500 };
+        }
+        
+        return data || { diaria: 100, quincenal: 1500, mensual: 2500 };
+    } catch (e) {
+        console.error('Error cargando metas:', e);
+        return { diaria: 100, quincenal: 1500, mensual: 2500 };
+    }
+}
+
+// Obtener ventas de hoy desde Supabase
+async function obtenerVentasHoy() {
+    const client = window.supabaseClient?.getClient();
     
-    const ventas = JSON.parse(localStorage.getItem('ventas') || '[]');
+    if (!client) {
+        return { total: 0, cantidad: 0 };
+    }
+    
     const hoy = new Date().toISOString().split('T')[0];
-    const ventasHoy = ventas.filter(v => v.fecha === hoy);
-    const totalVentasHoy = ventasHoy.reduce((sum, v) => sum + (v.total || 0), 0);
-    const progresoMeta = Math.min(100, (totalVentasHoy / metaDiaria) * 100);
+    
+    try {
+        const { data, error } = await client
+            .from('ventas')
+            .select('total')
+            .eq('fecha', hoy);
+        
+        if (error) {
+            console.error('Error obteniendo ventas de hoy:', error);
+            return { total: 0, cantidad: 0 };
+        }
+        
+        const total = (data || []).reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+        const cantidad = (data || []).length;
+        
+        return { total, cantidad };
+    } catch (e) {
+        console.error('Error obteniendo ventas de hoy:', e);
+        return { total: 0, cantidad: 0 };
+    }
+}
+
+// Función para mostrar el Punto de Venta
+async function mostrarPuntoVenta() {
+    // Mostrar loading
+    const tempHtml = `
+        <div style="padding: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h2 style="margin:0;">🛒 Punto de Venta</h2>
+                <div style="background: linear-gradient(135deg, #8B4513, #D2691E); color: white; padding: 0.8rem 1.5rem; border-radius: 10px;">
+                    <span style="font-size: 1.2rem;">Cargando...</span>
+                </div>
+            </div>
+            <div style="text-align: center; padding: 3rem;">
+                <p>🔄 Conectando con Supabase...</p>
+            </div>
+        </div>
+    `;
+    
+    await cargarProductosPDV();
+    const metas = await cargarMetasPDV();
+    const ventasHoy = await obtenerVentasHoy();
+    
+    const metaDiaria = metas.diaria || 100;
+    const totalVentasHoy = ventasHoy.total;
+    const progresoMeta = metaDiaria > 0 ? Math.min(100, (totalVentasHoy / metaDiaria) * 100) : 0;
+    const totalCarrito = carrito.reduce((sum, item) => sum + (item.total || 0), 0);
     
     return `
         <div style="padding: 1rem;">
@@ -50,13 +150,21 @@ function mostrarPuntoVenta() {
                 <div style="width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden;">
                     <div style="width: ${progresoMeta}%; height: 100%; background: ${progresoMeta >= 100 ? '#2E7D32' : '#8B4513'}; transition: width 0.3s;"></div>
                 </div>
+                <div style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                    Faltan ${formatearMoneda(Math.max(0, metaDiaria - totalVentasHoy))} para alcanzar la meta
+                </div>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 400px; gap: 2rem;">
                 
                 <!-- Columna izquierda: Catálogo de productos -->
                 <div style="background: white; border-radius: 10px; padding: 1.5rem;">
-                    <h3>🥐 Productos Disponibles</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin:0;">🥐 Productos Disponibles</h3>
+                        <button class="btn btn-info" style="padding: 0.3rem 0.8rem;" onclick="sincronizarProductosPDV()">
+                            🔄 Sincronizar
+                        </button>
+                    </div>
                     
                     <div style="margin-bottom: 1rem;">
                         <input type="text" id="buscador-pdv" placeholder="🔍 Buscar producto..." 
@@ -132,7 +240,7 @@ function mostrarPuntoVenta() {
 
 function renderizarGridProductosPDV() {
     if (!catalogoProductos || catalogoProductos.length === 0) {
-        return '<p style="grid-column: 1/-1; text-align: center; color: #666;">No hay productos disponibles. Ve a "Productos" para agregar.</p>';
+        return '<p style="grid-column: 1/-1; text-align: center; color: #666; padding: 2rem;">No hay productos disponibles. Ve a "Productos" para agregar.</p>';
     }
     
     return catalogoProductos.map(prod => {
@@ -140,7 +248,11 @@ function renderizarGridProductosPDV() {
         
         const stockTotal = prod.stock || 0;
         const sinStock = stockTotal <= 0;
-        const precioBase = prod.presentaciones && prod.presentaciones[0] ? prod.presentaciones[0].precio : 0;
+        
+        let precioBase = 0;
+        if (prod.presentaciones && prod.presentaciones.length > 0) {
+            precioBase = prod.presentaciones[0].precio || 0;
+        }
         
         return `
             <div onclick="${sinStock ? '' : `abrirModalProductoPDV(${prod.id})`}" 
@@ -151,7 +263,7 @@ function renderizarGridProductosPDV() {
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🥐</div>
                 <div style="font-weight: bold; margin-bottom: 0.5rem;">${prod.nombre || 'Producto'}</div>
-                <div style="color: #0059ce; font-weight: bold; margin-bottom: 0.5rem;">
+                <div style="color: #8B4513; font-weight: bold; margin-bottom: 0.5rem;">
                     ${formatearMoneda(precioBase)}
                 </div>
                 <div style="font-size: 0.9rem; color: ${sinStock ? '#C62828' : '#2E7D32'};">
@@ -202,8 +314,10 @@ function abrirModalProductoPDV(productoId) {
     const presentacionesDiv = document.getElementById('modal-presentaciones');
     presentacionesDiv.innerHTML = '';
     
-    if (producto.presentaciones && producto.presentaciones.length > 0) {
-        producto.presentaciones.forEach((p, idx) => {
+    const presentaciones = producto.presentaciones || [];
+    
+    if (presentaciones.length > 0) {
+        presentaciones.forEach((p, idx) => {
             const div = document.createElement('div');
             div.style.margin = '0.5rem 0';
             div.innerHTML = `
@@ -211,7 +325,7 @@ function abrirModalProductoPDV(productoId) {
                     <input type="radio" name="presentacion-pdv" value="${p.tipo || 'unidad'}" data-precio="${p.precio || 0}" data-unidades="${p.unidades || 1}" ${idx === 0 ? 'checked' : ''}>
                     <div>
                         <strong>${p.tipo === 'unidad' ? '🍞 Unidad' : '📦 Bolsa'}</strong>
-                        <div>${formatearMoneda(p.precio || 0)} ${p.tipo === 'bolsa' ? `(${formatearMoneda((p.precio || 0)/(p.unidades || 1))}/und)` : ''}</div>
+                        <div>${formatearMoneda(p.precio || 0)} ${p.tipo === 'bolsa' ? `(${formatearMoneda((p.precio || 0) / (p.unidades || 1))}/und)` : ''}</div>
                     </div>
                 </label>
             `;
@@ -267,7 +381,7 @@ function agregarAlCarritoPDV() {
         return;
     }
     
-    const presentacionTexto = tipo === 'unidad' ? 'Unidad' : `Bolsa (${unidadesPorPresentacion} und)`;
+    const presentacionTexto = tipo === 'unidad' ? '🍞 Unidad' : `📦 Bolsa (${unidadesPorPresentacion} und)`;
     
     carrito.push({
         productoId: productoSeleccionadoPDV.id,
@@ -308,14 +422,12 @@ function actualizarVistaCarritoPDV() {
         carritoDiv.innerHTML = renderizarCarritoPDV();
     }
     
-    // Actualizar el total en el DOM
     const totalSpan = document.getElementById('total-carrito-pdv');
     if (totalSpan) {
         const total = carrito.reduce((sum, item) => sum + (item.total || 0), 0);
         totalSpan.textContent = formatearMoneda(total);
     }
     
-    // Actualizar estado de los botones
     const limpiarBtn = document.querySelector('button[onclick="limpiarCarritoPDV()"]');
     const cobrarBtn = document.querySelector('button[onclick="finalizarVentaPDV()"]');
     
@@ -330,7 +442,14 @@ function actualizarVistaCarritoPDV() {
     }
 }
 
-function finalizarVentaPDV() {
+async function finalizarVentaPDV() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (!carrito || carrito.length === 0) {
         mostrarNotificacion('El carrito está vacío', 'error');
         return;
@@ -340,36 +459,78 @@ function finalizarVentaPDV() {
     
     if (confirm(`¿Confirmar venta por ${formatearMoneda(totalVenta)}?`)) {
         
-        const ventas = JSON.parse(localStorage.getItem('ventas') || '[]');
         const hoy = new Date().toISOString().split('T')[0];
+        let ventasExitosas = 0;
+        let errores = 0;
         
-        carrito.forEach(item => {
-            const nuevoId = ventas.length > 0 ? Math.max(...ventas.map(v => v.id || 0)) + 1 : 1;
+        for (const item of carrito) {
+            // Verificar stock nuevamente
+            const producto = catalogoProductos.find(p => p.id === item.productoId);
+            if (!producto || (producto.stock || 0) < item.unidades) {
+                mostrarNotificacion(`Stock insuficiente para ${item.productoNombre}`, 'error');
+                errores++;
+                continue;
+            }
             
             const nuevaVenta = {
-                id: nuevoId,
                 fecha: hoy,
-                productoId: item.productoId,
-                productoNombre: item.productoNombre,
+                producto_id: item.productoId,
+                producto_nombre: item.productoNombre,
                 tipo: item.tipo,
-                unidadesPorPresentacion: item.unidadesPorPresentacion,
+                unidades_por_presentacion: item.unidadesPorPresentacion,
                 cantidad: item.cantidad,
-                unidadesVendidas: item.unidades,
-                precioUnitario: item.precioUnitario,
+                unidades_vendidas: item.unidades,
+                precio_unitario: item.precioUnitario,
                 total: item.total
             };
             
-            ventas.push(nuevaVenta);
-            
-            if (window.registrarVentaProducto) {
-                window.registrarVentaProducto(item.productoId, item.tipo, item.cantidad);
+            try {
+                // Insertar venta en Supabase
+                const { data: ventaData, error: ventaError } = await client
+                    .from('ventas')
+                    .insert([nuevaVenta])
+                    .select();
+                
+                if (ventaError) {
+                    console.error('Error guardando venta:', ventaError);
+                    errores++;
+                    continue;
+                }
+                
+                // Actualizar stock del producto
+                const nuevoStock = (producto.stock || 0) - item.unidades;
+                const nuevosVendidos = (producto.vendidos || 0) + item.unidades;
+                
+                const { error: stockError } = await client
+                    .from('productos')
+                    .update({
+                        stock: nuevoStock,
+                        vendidos: nuevosVendidos
+                    })
+                    .eq('id', item.productoId);
+                
+                if (stockError) {
+                    console.error('Error actualizando stock:', stockError);
+                }
+                
+                // Actualizar producto en catálogo local
+                const idx = catalogoProductos.findIndex(p => p.id === item.productoId);
+                if (idx !== -1) {
+                    catalogoProductos[idx].stock = nuevoStock;
+                    catalogoProductos[idx].vendidos = nuevosVendidos;
+                }
+                
+                ventasExitosas++;
+            } catch (e) {
+                console.error('Error en venta:', e);
+                errores++;
             }
-        });
+        }
         
-        localStorage.setItem('ventas', JSON.stringify(ventas));
-        
+        // Limpiar carrito
         carrito = [];
-        cargarProductosPDV();
+        
+        // Actualizar vista
         actualizarVistaCarritoPDV();
         
         const grid = document.getElementById('grid-productos-pdv');
@@ -377,7 +538,18 @@ function finalizarVentaPDV() {
             grid.innerHTML = renderizarGridProductosPDV();
         }
         
-        mostrarNotificacion(`✅ Venta completada: ${formatearMoneda(totalVenta)}`, 'exito');
+        // Actualizar total de ventas hoy en el encabezado
+        const ventasHoy = await obtenerVentasHoy();
+        const headerSpan = document.querySelector('div[style*="Ventas Hoy"] span');
+        if (headerSpan) {
+            headerSpan.textContent = `Ventas Hoy: ${formatearMoneda(ventasHoy.total)}`;
+        }
+        
+        if (errores > 0) {
+            mostrarNotificacion(`⚠️ Venta parcial: ${ventasExitosas} exitosas, ${errores} errores`, 'error');
+        } else {
+            mostrarNotificacion(`✅ Venta completada: ${formatearMoneda(totalVenta)}`, 'exito');
+        }
     }
 }
 
@@ -395,7 +567,11 @@ function filtrarProductosPDV() {
             grid.innerHTML = productosFiltrados.map(prod => {
                 const stockTotal = prod.stock || 0;
                 const sinStock = stockTotal <= 0;
-                const precioBase = prod.presentaciones && prod.presentaciones[0] ? prod.presentaciones[0].precio : 0;
+                
+                let precioBase = 0;
+                if (prod.presentaciones && prod.presentaciones.length > 0) {
+                    precioBase = prod.presentaciones[0].precio || 0;
+                }
                 
                 return `
                     <div onclick="${sinStock ? '' : `abrirModalProductoPDV(${prod.id})`}" 
@@ -419,8 +595,34 @@ function filtrarProductosPDV() {
     }
 }
 
+async function sincronizarProductosPDV() {
+    await cargarProductosPDV();
+    
+    const grid = document.getElementById('grid-productos-pdv');
+    if (grid) {
+        grid.innerHTML = renderizarGridProductosPDV();
+    }
+    
+    mostrarNotificacion('Productos sincronizados', 'exito');
+}
+
 // Inicializar
-cargarProductosPDV();
+(async function inicializar() {
+    let intentos = 0;
+    const maxIntentos = 50;
+    
+    while (!window.supabaseClient?.isReady() && intentos < maxIntentos) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        intentos++;
+    }
+    
+    if (window.supabaseClient?.isReady()) {
+        await cargarProductosPDV();
+        console.log('✅ Módulo Punto de Venta inicializado con Supabase');
+    } else {
+        console.error('❌ No se pudo conectar con Supabase');
+    }
+})();
 
 // Exponer funciones
 window.mostrarPuntoVenta = mostrarPuntoVenta;
@@ -431,5 +633,6 @@ window.agregarAlCarritoPDV = agregarAlCarritoPDV;
 window.eliminarDelCarritoPDV = eliminarDelCarritoPDV;
 window.limpiarCarritoPDV = limpiarCarritoPDV;
 window.finalizarVentaPDV = finalizarVentaPDV;
+window.sincronizarProductosPDV = sincronizarProductosPDV;
 
-console.log('🛒 Módulo Punto de Venta cargado correctamente');
+console.log('🛒 Módulo Punto de Venta (Supabase) cargado correctamente');

@@ -1,7 +1,7 @@
-// script.js - Control principal de la aplicación
+// script.js - Control principal de la aplicación con Supabase
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🍞 Dulce Herencia - Sistema cargado');
+    console.log('🍞 Dulce Herencia - Sistema cargado con Supabase');
     
     // Elementos del DOM
     const menuButtons = document.querySelectorAll('.menu-btn');
@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSalir = document.getElementById('btn-salir');
     
     // Función para cambiar de módulo
-    function cambiarModulo(moduleId) {
+    async function cambiarModulo(moduleId) {
         // Ocultar todos los módulos
         document.querySelectorAll('.module').forEach(mod => {
             mod.classList.remove('active');
@@ -22,11 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Si es el inicio, actualizar el resumen
             if (moduleId === 'inicio') {
-                actualizarResumenInicio();
+                await actualizarResumenInicio();
             }
         } else {
             // Si no existe, lo creamos dinámicamente
-            cargarModulo(moduleId);
+            await cargarModulo(moduleId);
         }
         
         // Actualizar botón activo
@@ -39,113 +39,193 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Función para actualizar el resumen del inicio
-    function actualizarResumenInicio() {
+    async function actualizarResumenInicio() {
         const resumenDiv = document.getElementById('inicio-resumen');
         if (!resumenDiv) return;
         
-        // Obtener datos de los diferentes módulos
-        const ventas = JSON.parse(localStorage.getItem('ventas') || '[]');
-        const empleados = JSON.parse(localStorage.getItem('empleados') || '[]');
-        const instrumentos = JSON.parse(localStorage.getItem('instrumentos') || '[]');
-        const productos = JSON.parse(localStorage.getItem('productos') || '[]');
-        const materiaPrima = JSON.parse(localStorage.getItem('materiaPrima') || '[]');
-        const metas = JSON.parse(localStorage.getItem('metas') || '{"diaria":100,"quincenal":1500,"mensual":2500}');
-        
-        const empleadosActivos = empleados.filter(e => e.activo).length;
-        const totalVentas = ventas.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
-        const totalInstrumentos = instrumentos.reduce((sum, i) => sum + (Number(i.precio) || 0), 0);
-        const totalMateriaPrima = materiaPrima.reduce((sum, m) => sum + (m.cantidad * m.precioUnitario), 0);
-        
-        // Calcular progreso de metas
-        const hoy = new Date().toISOString().split('T')[0];
-        const totalHoy = ventas.filter(v => v.fecha === hoy).reduce((sum, v) => sum + (Number(v.total) || 0), 0);
-        const porcentajeDiario = Math.min(100, (totalHoy / metas.diaria) * 100);
-        
-        // Calcular unidades vendidas hoy
-        const unidadesHoy = ventas.filter(v => v.fecha === hoy).reduce((sum, v) => sum + (Number(v.unidadesVendidas) || 0), 0);
-        
+        // Mostrar loading
         resumenDiv.innerHTML = `
-            <div class="card">
-                <h3>📊 Ventas Hoy</h3>
-                <p style="font-size: 2rem; color: #2E7D32;">${formatearMoneda(totalHoy)}</p>
-                <p>${unidadesHoy} unidades | ${ventas.filter(v => v.fecha === hoy).length} ventas</p>
-            </div>
-            <div class="card">
-                <h3>💰 Ventas Totales</h3>
-                <p style="font-size: 2rem; color: #1976D2;">${formatearMoneda(totalVentas)}</p>
-                <p>${ventas.length} transacciones</p>
-            </div>
-            <div class="card">
-                <h3>👥 Empleados</h3>
-                <p style="font-size: 2rem; color: #8B4513;">${empleadosActivos}</p>
-                <p>Activos de ${empleados.length} totales</p>
-            </div>
-            <div class="card">
-                <h3>🛠️ Inversión en Instrumentos</h3>
-                <p style="font-size: 2rem; color: #D2691E;">${formatearMoneda(totalInstrumentos)}</p>
-                <p>${instrumentos.length} instrumentos</p>
-            </div>
-            <div class="card">
-                <h3>🥐 Productos</h3>
-                <p style="font-size: 2rem; color: #9C27B0;">${productos.length}</p>
-                <p>En catálogo</p>
-            </div>
-            <div class="card">
-                <h3>📦 Materia Prima</h3>
-                <p style="font-size: 2rem; color: #C62828;">${formatearMoneda(totalMateriaPrima)}</p>
-                <p>${materiaPrima.length} items</p>
-            </div>
-            <div class="card" style="grid-column: span 2;">
-                <h3>🎯 Meta Diaria</h3>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="flex: 1;">
-                        <div style="font-size: 1.2rem;">${formatearMoneda(totalHoy)} de ${formatearMoneda(metas.diaria)}</div>
-                        <div style="width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin-top: 0.5rem;">
-                            <div style="width: ${porcentajeDiario}%; height: 100%; background: ${porcentajeDiario >= 100 ? '#2E7D32' : '#8B4513'}; transition: width 0.3s;"></div>
-                        </div>
-                    </div>
-                    <div style="font-size: 2rem; font-weight: bold; color: ${porcentajeDiario >= 100 ? '#2E7D32' : '#8B4513'};">${porcentajeDiario.toFixed(0)}%</div>
-                </div>
+            <div class="card" style="grid-column: 1/-1; text-align: center;">
+                <h3>🔄 Cargando datos desde Supabase...</h3>
             </div>
         `;
+        
+        const client = window.supabaseClient?.getClient();
+        
+        if (!client) {
+            resumenDiv.innerHTML = `
+                <div class="card" style="grid-column: 1/-1; text-align: center;">
+                    <h3>❌ Error de conexión</h3>
+                    <p>No se pudo conectar con Supabase. Recarga la página.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        try {
+            // Obtener datos de Supabase
+            const [ventasData, empleadosData, instrumentosData, productosData, materiaPrimaData, metasData, inversionesData] = await Promise.all([
+                client.from('ventas').select('*'),
+                client.from('empleados').select('*'),
+                client.from('instrumentos').select('*'),
+                client.from('productos').select('*'),
+                client.from('materia_prima').select('*'),
+                client.from('metas').select('*').eq('id', 1).single(),
+                client.from('inversiones').select('*')
+            ]);
+            
+            const ventas = ventasData.data || [];
+            const empleados = empleadosData.data || [];
+            const instrumentos = instrumentosData.data || [];
+            const productos = productosData.data || [];
+            const materiaPrima = materiaPrimaData.data || [];
+            const metas = metasData.data || { diaria: 100, quincenal: 1500, mensual: 2500 };
+            const inversiones = inversionesData.data || [];
+            
+            const empleadosActivos = empleados.filter(e => e.activo).length;
+            
+            const totalVentas = ventas.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+            const totalInstrumentos = instrumentos.reduce((sum, i) => sum + (Number(i.precio) || 0), 0);
+            const totalMateriaPrima = materiaPrima.reduce((sum, m) => sum + ((Number(m.cantidad) || 0) * (Number(m.precio_unitario) || 0)), 0);
+            const totalInversiones = inversiones.reduce((sum, inv) => sum + (Number(inv.monto) || 0), 0);
+            
+            // Calcular progreso de metas
+            const hoy = new Date().toISOString().split('T')[0];
+            const ventasHoy = ventas.filter(v => v.fecha === hoy);
+            const totalHoy = ventasHoy.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+            const porcentajeDiario = metas.diaria > 0 ? Math.min(100, (totalHoy / metas.diaria) * 100) : 0;
+            
+            // Calcular unidades vendidas hoy
+            const unidadesHoy = ventasHoy.reduce((sum, v) => sum + (Number(v.unidades_vendidas) || 0), 0);
+            
+            // Calcular ganancia neta
+            const costoPlanillaMensual = empleadosActivos * 15 * 30;
+            const gananciaNeta = totalVentas - totalInversiones - costoPlanillaMensual;
+            
+            // Calcular ventas de la semana
+            const fechaSemana = new Date();
+            fechaSemana.setDate(fechaSemana.getDate() - 7);
+            const ventasSemana = ventas.filter(v => new Date(v.fecha) >= fechaSemana);
+            const totalSemana = ventasSemana.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+            
+            resumenDiv.innerHTML = `
+                <div class="card">
+                    <h3>📊 Ventas Hoy</h3>
+                    <p style="font-size: 2rem; color: #2E7D32;">${formatearMoneda(totalHoy)}</p>
+                    <p>${unidadesHoy} unidades | ${ventasHoy.length} ventas</p>
+                </div>
+                <div class="card">
+                    <h3>💰 Ventas Totales</h3>
+                    <p style="font-size: 2rem; color: #1976D2;">${formatearMoneda(totalVentas)}</p>
+                    <p>${ventas.length} transacciones</p>
+                </div>
+                <div class="card">
+                    <h3>👥 Empleados</h3>
+                    <p style="font-size: 2rem; color: #8B4513;">${empleadosActivos}</p>
+                    <p>Activos de ${empleados.length} totales</p>
+                </div>
+                <div class="card">
+                    <h3>🛠️ Inversión en Instrumentos</h3>
+                    <p style="font-size: 2rem; color: #D2691E;">${formatearMoneda(totalInstrumentos)}</p>
+                    <p>${instrumentos.length} instrumentos</p>
+                </div>
+                <div class="card">
+                    <h3>🥐 Productos</h3>
+                    <p style="font-size: 2rem; color: #9C27B0;">${productos.length}</p>
+                    <p>En catálogo</p>
+                </div>
+                <div class="card">
+                    <h3>📦 Materia Prima</h3>
+                    <p style="font-size: 2rem; color: #C62828;">${formatearMoneda(totalMateriaPrima)}</p>
+                    <p>${materiaPrima.length} items</p>
+                </div>
+                <div class="card">
+                    <h3>💸 Total Inversiones</h3>
+                    <p style="font-size: 2rem; color: #E65100;">${formatearMoneda(totalInversiones)}</p>
+                    <p>${inversiones.length} registros</p>
+                </div>
+                <div class="card">
+                    <h3>📈 Ganancia Neta</h3>
+                    <p style="font-size: 2rem; color: ${gananciaNeta >= 0 ? '#2E7D32' : '#C62828'};">${formatearMoneda(gananciaNeta)}</p>
+                    <p>Ingresos - Inversiones - Planilla</p>
+                </div>
+                <div class="card" style="grid-column: span 2;">
+                    <h3>🎯 Meta Diaria</h3>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 1.2rem;">${formatearMoneda(totalHoy)} de ${formatearMoneda(metas.diaria)}</div>
+                            <div style="width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin-top: 0.5rem;">
+                                <div style="width: ${porcentajeDiario}%; height: 100%; background: ${porcentajeDiario >= 100 ? '#2E7D32' : '#8B4513'}; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                        <div style="font-size: 2rem; font-weight: bold; color: ${porcentajeDiario >= 100 ? '#2E7D32' : '#8B4513'};">
+                            ${porcentajeDiario.toFixed(0)}%
+                        </div>
+                    </div>
+                </div>
+                <div class="card" style="grid-column: span 2;">
+                    <h3>📅 Resumen Semanal</h3>
+                    <p style="font-size: 1.5rem; color: #1976D2;">${formatearMoneda(totalSemana)}</p>
+                    <p>${ventasSemana.length} ventas en los últimos 7 días</p>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error cargando resumen:', error);
+            resumenDiv.innerHTML = `
+                <div class="card" style="grid-column: 1/-1; text-align: center;">
+                    <h3>❌ Error al cargar datos</h3>
+                    <p>${error.message}</p>
+                    <button class="btn btn-info" onclick="location.reload()">🔄 Recargar</button>
+                </div>
+            `;
+        }
     }
     
     // Función para cargar módulos dinámicamente
-    function cargarModulo(moduleId) {
+    async function cargarModulo(moduleId) {
         const moduleContainer = document.createElement('div');
         moduleContainer.id = moduleId;
         moduleContainer.className = 'module';
         
+        // Mostrar loading mientras carga
+        moduleContainer.innerHTML = `
+            <div style="text-align: center; padding: 3rem;">
+                <h2>Cargando módulo...</h2>
+                <p>🔄 Conectando con Supabase...</p>
+            </div>
+        `;
+        contenido.appendChild(moduleContainer);
+        
         switch(moduleId) {
             case 'punto-venta':
                 if (typeof window.mostrarPuntoVenta === 'function') {
-                    moduleContainer.innerHTML = window.mostrarPuntoVenta();
+                    moduleContainer.innerHTML = await window.mostrarPuntoVenta();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Punto de Venta</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Punto de Venta</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
             case 'historial-ventas':
                 if (typeof window.mostrarVentas === 'function') {
-                    moduleContainer.innerHTML = window.mostrarVentas();
+                    moduleContainer.innerHTML = await window.mostrarVentas();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Historial de Ventas</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Historial de Ventas</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
             case 'instrumentos':
                 if (typeof window.mostrarInstrumentos === 'function') {
-                    moduleContainer.innerHTML = window.mostrarInstrumentos();
+                    moduleContainer.innerHTML = await window.mostrarInstrumentos();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Instrumentos</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Instrumentos</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
             case 'empleados':
                 if (typeof window.mostrarEmpleados === 'function') {
-                    moduleContainer.innerHTML = window.mostrarEmpleados();
+                    moduleContainer.innerHTML = await window.mostrarEmpleados();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Empleados</h2><p>Cargando módulo...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Empleados</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
@@ -153,23 +233,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof window.mostrarProductos === 'function') {
                     moduleContainer.innerHTML = window.mostrarProductos();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Productos</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Productos</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
             case 'ganancias':
                 if (typeof window.mostrarGanancias === 'function') {
-                    moduleContainer.innerHTML = window.mostrarGanancias();
+                    moduleContainer.innerHTML = await window.mostrarGanancias();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Ganancias</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Ganancias</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
             case 'materia-prima':
                 if (typeof window.mostrarMateriaPrima === 'function') {
-                    moduleContainer.innerHTML = window.mostrarMateriaPrima();
+                    moduleContainer.innerHTML = await window.mostrarMateriaPrima();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Materia Prima</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Materia Prima</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
@@ -177,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof window.mostrarGraficas === 'function') {
                     moduleContainer.innerHTML = window.mostrarGraficas();
                 } else {
-                    moduleContainer.innerHTML = '<h2>Módulo de Gráficas</h2><p>Cargando...</p>';
+                    moduleContainer.innerHTML = '<h2>Módulo de Gráficas</h2><p>Error cargando módulo</p>';
                 }
                 break;
                 
@@ -185,24 +265,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 moduleContainer.innerHTML = '<h2>Módulo no encontrado</h2>';
         }
         
-        contenido.appendChild(moduleContainer);
         moduleContainer.classList.add('active');
     }
     
     // Agregar evento a cada botón del menú
     menuButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const moduleId = btn.dataset.module;
             
             if (moduleId === 'salir') {
-                // Diálogo de confirmación para salir
                 if (confirm('¿Estás seguro de que quieres salir de la aplicación?')) {
+                    // Limpiar cualquier dato sensible si es necesario
                     window.close();
                 }
                 return;
             }
             
-            cambiarModulo(moduleId);
+            await cambiarModulo(moduleId);
         });
     });
     
@@ -262,7 +341,10 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
 
 // Función para volver al inicio (usada por los módulos)
 function volverAlInicio() {
-    document.querySelector('[data-module="inicio"]').click();
+    const inicioBtn = document.querySelector('[data-module="inicio"]');
+    if (inicioBtn) {
+        inicioBtn.click();
+    }
 }
 
 // Función para validar números
@@ -344,15 +426,24 @@ function imprimirReporte(titulo, contenido) {
     ventanaImpresion.print();
 }
 
-// Función para formatear número con decimales
-function formatearNumero(valor, decimales = 2) {
-    return Number(valor).toFixed(decimales);
-}
-
-// Función para calcular porcentaje
-function calcularPorcentaje(valor, total) {
-    if (total === 0) return 0;
-    return (valor / total) * 100;
+// Función para sincronizar todos los datos
+async function sincronizarTodosLosDatos() {
+    mostrarNotificacion('Sincronizando datos con Supabase...', 'info');
+    
+    try {
+        // Intentar sincronizar cada módulo si tiene función de sincronización
+        if (window.sincronizarProductos) await window.sincronizarProductos();
+        if (window.sincronizarVentas) await window.sincronizarVentas();
+        if (window.sincronizarInstrumentos) await window.sincronizarInstrumentos();
+        if (window.sincronizarEmpleados) await window.sincronizarEmpleados();
+        if (window.sincronizarMateriaPrima) await window.sincronizarMateriaPrima();
+        if (window.sincronizarGanancias) await window.sincronizarGanancias();
+        
+        mostrarNotificacion('✅ Todos los datos sincronizados', 'exito');
+    } catch (e) {
+        console.error('Error sincronizando:', e);
+        mostrarNotificacion('Error al sincronizar datos', 'error');
+    }
 }
 
 // Animaciones CSS
@@ -377,7 +468,6 @@ window.mostrarNotificacion = mostrarNotificacion;
 window.validarNumero = validarNumero;
 window.exportarACSV = exportarACSV;
 window.imprimirReporte = imprimirReporte;
-window.formatearNumero = formatearNumero;
-window.calcularPorcentaje = calcularPorcentaje;
+window.sincronizarTodosLosDatos = sincronizarTodosLosDatos;
 
 console.log('✅ Script principal cargado con todas las funciones globales');

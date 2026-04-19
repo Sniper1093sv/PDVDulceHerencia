@@ -82,20 +82,31 @@
         </footer>
     </div>
 
+    <!-- Script de Supabase (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script>
+        // Exponer la función createClient globalmente
+        window.supabaseCreateClient = supabase.createClient;
+        console.log('📦 Biblioteca Supabase cargada');
+    </script>
+
     <!-- PRIMERO: Script principal (funciones globales) -->
     <script src="script.js"></script>
 
-    <!-- SEGUNDO: Módulos de sistema (base de datos y exportación) -->
+    <!-- SEGUNDO: Cliente de Supabase -->
+    <script src="modules/supabaseClient.js"></script>
+
+    <!-- TERCERO: Módulos de sistema (base de datos y exportación) -->
     <script src="modules/database.js"></script>
     <script src="modules/exportador.js"></script>
 
-    <!-- TERCERO: Módulos de negocio (ordenados por dependencia) -->
+    <!-- CUARTO: Módulos de negocio (ordenados por dependencia) -->
     <script src="modules/productos.js"></script>      <!-- Base para ventas -->
     <script src="modules/instrumentos.js"></script>
     <script src="modules/empleados.js"></script>
     <script src="modules/materia_prima.js"></script>
-    <script src="modules/punto_venta.js"></script>    <!-- Depende de productos -->
-    <script src="modules/ventas.js"></script>         <!-- Historial -->
+    <script src="modules/ventas.js"></script>    <!-- Depende de productos -->
+    <script src="modules/punto_venta.js"></script>         <!-- Historial -->
     <script src="modules/ganancias.js"></script>      <!-- Depende de ventas -->
     <script src="modules/graficas.js"></script>       <!-- Depende de ventas -->
 
@@ -111,40 +122,40 @@
         document.addEventListener('DOMContentLoaded', function() {
             const resetBtn = document.getElementById('resetSecreto');
             if (resetBtn) {
-                resetBtn.addEventListener('click', function(e) {
+                resetBtn.addEventListener('click', async function(e) {
                     if (e.ctrlKey && e.shiftKey) {
-                        if (confirm('🔥 ¿RESETEAR COMPLETAMENTE TODOS LOS DATOS?\n\nSe borrarán ventas, productos, empleados, inversiones...')) {
+                        if (confirm('🔥 ¿RESETEAR COMPLETAMENTE TODOS LOS DATOS?\n\nSe borrarán TODOS los datos de Supabase.')) {
                             if (confirm('⚠️ ÚLTIMA OPORTUNIDAD: ¿Estás ABSOLUTAMENTE seguro?')) {
                                 console.log('🔥 INICIANDO RESETEO TOTAL...');
                                 
-                                // Lista de todas las claves de localStorage
-                                const claves = [
-                                    'ventas', 'productos', 'instrumentos', 'empleados', 
-                                    'materiaPrima', 'metas', 'inversiones', 'carrito'
-                                ];
-                                
-                                // Borrar localStorage específico
-                                claves.forEach(key => {
-                                    localStorage.removeItem(key);
-                                    console.log(`✅ Eliminado: ${key}`);
-                                });
-                                
-                                // Borrar todo el localStorage por si acaso
-                                localStorage.clear();
-                                
-                                // Eliminar IndexedDB
-                                if (window.indexedDB) {
-                                    const request = indexedDB.deleteDatabase('DulceHerenciaDB');
-                                    request.onsuccess = () => {
-                                        alert('✅ TODOS LOS DATOS HAN SIDO ELIMINADOS\n\nLa página se recargará.');
+                                // Resetear Supabase
+                                const client = window.supabaseClient?.getClient();
+                                if (client) {
+                                    try {
+                                        await client.from('ventas').delete().neq('id', 0);
+                                        await client.from('productos').delete().neq('id', 0);
+                                        await client.from('instrumentos').delete().neq('id', 0);
+                                        await client.from('empleados').delete().neq('id', 0);
+                                        await client.from('materia_prima').delete().neq('id', 0);
+                                        await client.from('inversiones').delete().neq('id', 0);
+                                        
+                                        // Resetear metas a valores por defecto
+                                        await client.from('metas').upsert({ 
+                                            id: 1, 
+                                            diaria: 100, 
+                                            quincenal: 1500, 
+                                            mensual: 2500 
+                                        });
+                                        
+                                        alert('✅ TODOS LOS DATOS DE SUPABASE HAN SIDO ELIMINADOS\n\nLa página se recargará.');
                                         location.reload();
-                                    };
-                                    request.onerror = () => {
-                                        alert('⚠️ Datos de localStorage borrados. Recargando...');
+                                    } catch (err) {
+                                        console.error('Error reseteando Supabase:', err);
+                                        alert('⚠️ Error al resetear Supabase. Recargando...');
                                         location.reload();
-                                    };
+                                    }
                                 } else {
-                                    alert('✅ Datos borrados. Recargando...');
+                                    alert('⚠️ Cliente Supabase no disponible. Recargando...');
                                     location.reload();
                                 }
                             }

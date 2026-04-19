@@ -1,47 +1,100 @@
-// modules/materia_prima.js - Gestión de inventario de materia prima
+// modules/materia_prima.js - Gestión de inventario de materia prima con Supabase
 
 let materiaPrima = [];
 
-// Cargar datos
-function cargarMateriaPrima() {
-    const datos = localStorage.getItem('materiaPrima');
-    if (datos) {
-        try {
-            materiaPrima = JSON.parse(datos);
-        } catch (e) {
-            console.error('Error cargando materia prima:', e);
+// Cargar datos desde Supabase
+async function cargarMateriaPrima() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        materiaPrima = [];
+        return;
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('materia_prima')
+            .select('*')
+            .order('nombre', { ascending: true });
+        
+        if (error) {
+            console.error('Error cargando materia prima:', error);
             materiaPrima = [];
+            return;
         }
-    } else {
-        // Datos de ejemplo
-        materiaPrima = [
-            { id: 1, nombre: 'Harina', cantidad: 50, unidad: 'kg', precioUnitario: 0.80, fechaCompra: '2026-02-01', proveedor: 'Distribuidora Central' },
-            { id: 2, nombre: 'Azúcar', cantidad: 30, unidad: 'kg', precioUnitario: 1.20, fechaCompra: '2026-02-05', proveedor: 'Distribuidora Central' },
-            { id: 3, nombre: 'Huevos', cantidad: 120, unidad: 'unidades', precioUnitario: 0.15, fechaCompra: '2026-02-10', proveedor: 'Granja Local' },
-            { id: 4, nombre: 'Mantequilla', cantidad: 20, unidad: 'kg', precioUnitario: 4.50, fechaCompra: '2026-02-12', proveedor: 'Lácteos SA' },
-            { id: 5, nombre: 'Levadura', cantidad: 5, unidad: 'kg', precioUnitario: 3.20, fechaCompra: '2026-02-15', proveedor: 'Distribuidora Central' },
-        ];
-        guardarMateriaPrima();
+        
+        materiaPrima = (data || []).map(item => ({
+            ...item,
+            cantidad: Number(item.cantidad) || 0,
+            precioUnitario: Number(item.precio_unitario) || 0
+        }));
+        
+        // Si no hay datos, crear ejemplos
+        if (materiaPrima.length === 0) {
+            await crearMateriaPrimaEjemplo();
+        }
+        
+        console.log(`✅ ${materiaPrima.length} items de materia prima cargados desde Supabase`);
+    } catch (e) {
+        console.error('Error cargando materia prima:', e);
+        materiaPrima = [];
     }
 }
 
-function guardarMateriaPrima() {
-    localStorage.setItem('materiaPrima', JSON.stringify(materiaPrima));
+// Crear datos de ejemplo
+async function crearMateriaPrimaEjemplo() {
+    const client = window.supabaseClient?.getClient();
+    if (!client) return;
+    
+    const ejemplos = [
+        { nombre: 'Harina', cantidad: 50, unidad: 'kg', precio_unitario: 0.80, fecha_compra: '2026-02-01', proveedor: 'Distribuidora Central' },
+        { nombre: 'Azúcar', cantidad: 30, unidad: 'kg', precio_unitario: 1.20, fecha_compra: '2026-02-05', proveedor: 'Distribuidora Central' },
+        { nombre: 'Huevos', cantidad: 120, unidad: 'unidades', precio_unitario: 0.15, fecha_compra: '2026-02-10', proveedor: 'Granja Local' },
+        { nombre: 'Mantequilla', cantidad: 20, unidad: 'kg', precio_unitario: 4.50, fecha_compra: '2026-02-12', proveedor: 'Lácteos SA' },
+        { nombre: 'Levadura', cantidad: 5, unidad: 'kg', precio_unitario: 3.20, fecha_compra: '2026-02-15', proveedor: 'Distribuidora Central' }
+    ];
+    
+    try {
+        const { data, error } = await client
+            .from('materia_prima')
+            .insert(ejemplos)
+            .select();
+        
+        if (error) {
+            console.error('Error creando ejemplos:', error);
+            return;
+        }
+        
+        materiaPrima = (data || []).map(item => ({
+            ...item,
+            cantidad: Number(item.cantidad) || 0,
+            precioUnitario: Number(item.precio_unitario) || 0
+        }));
+        
+        console.log('✅ Ejemplos de materia prima creados');
+    } catch (e) {
+        console.error('Error creando ejemplos:', e);
+    }
 }
 
 // Función para calcular total invertido en materia prima
 function calcularTotalInvertido() {
     return materiaPrima.reduce((total, item) => {
-        return total + (item.cantidad * item.precioUnitario);
+        return total + ((Number(item.cantidad) || 0) * (Number(item.precioUnitario) || 0));
     }, 0);
 }
 
 // Función para mostrar el módulo
-function mostrarMateriaPrima() {
+async function mostrarMateriaPrima() {
+    await cargarMateriaPrima();
+    
     const totalInvertido = calcularTotalInvertido();
     const itemsBajoStock = materiaPrima.filter(item => {
-        if (item.unidad === 'kg' || item.unidad === 'litros') return item.cantidad < 10;
-        if (item.unidad === 'unidades') return item.cantidad < 50;
+        const cantidad = Number(item.cantidad) || 0;
+        if (item.unidad === 'kg' || item.unidad === 'litros') return cantidad < 10;
+        if (item.unidad === 'unidades') return cantidad < 50;
+        if (item.unidad === 'gramos') return cantidad < 1000;
         return false;
     }).length;
     
@@ -101,6 +154,16 @@ function mostrarMateriaPrima() {
                 </div>
                 <button type="submit" class="btn btn-success" style="margin-top: 1rem;">➕ Agregar al Inventario</button>
             </form>
+        </div>
+        
+        <!-- Botones de acción -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <button class="btn btn-info" onclick="sincronizarMateriaPrima()">
+                🔄 Sincronizar con Supabase
+            </button>
+            <button class="btn btn-info" onclick="exportarMateriaPrimaCSV()">
+                📊 Exportar a CSV
+            </button>
         </div>
         
         <!-- Tabla de inventario -->
@@ -172,22 +235,27 @@ function renderizarMateriaPrima() {
         return `<tr><td colspan="8" style="text-align: center; padding: 2rem;">No hay materia prima registrada</td></tr>`;
     }
     
-    return materiaPrima.map((item, index) => {
-        const total = item.cantidad * item.precioUnitario;
-        const bajoStock = (item.unidad === 'kg' && item.cantidad < 10) || 
-                         (item.unidad === 'litros' && item.cantidad < 10) || 
-                         (item.unidad === 'unidades' && item.cantidad < 50) ||
-                         (item.unidad === 'gramos' && item.cantidad < 1000);
+    return materiaPrima.map((item) => {
+        const cantidad = Number(item.cantidad) || 0;
+        const precioUnitario = Number(item.precioUnitario) || 0;
+        const total = cantidad * precioUnitario;
+        
+        const bajoStock = (item.unidad === 'kg' && cantidad < 10) || 
+                         (item.unidad === 'litros' && cantidad < 10) || 
+                         (item.unidad === 'unidades' && cantidad < 50) ||
+                         (item.unidad === 'gramos' && cantidad < 1000);
         
         return `
             <tr style="${bajoStock ? 'background: #ffebee;' : ''}">
-                <td><strong>${item.nombre}</strong></td>
-                <td style="font-weight: ${bajoStock ? 'bold' : 'normal'}; color: ${bajoStock ? '#C62828' : 'inherit'};">${item.cantidad}</td>
-                <td>${item.unidad}</td>
-                <td>${formatearMoneda(item.precioUnitario)}</td>
+                <td><strong>${item.nombre || ''}</strong></td>
+                <td style="font-weight: ${bajoStock ? 'bold' : 'normal'}; color: ${bajoStock ? '#C62828' : 'inherit'};">
+                    ${cantidad}
+                </td>
+                <td>${item.unidad || ''}</td>
+                <td>${formatearMoneda(precioUnitario)}</td>
                 <td>${formatearMoneda(total)}</td>
-                <td>${item.proveedor}</td>
-                <td>${new Date(item.fechaCompra).toLocaleDateString('es-ES')}</td>
+                <td>${item.proveedor || ''}</td>
+                <td>${item.fecha_compra ? new Date(item.fecha_compra).toLocaleDateString('es-ES') : ''}</td>
                 <td>
                     <button class="btn" style="background-color: var(--color-info); padding: 0.3rem 0.5rem; margin-right: 0.3rem;" onclick="abrirModalAjustar(${item.id})">
                         📦 Ajustar
@@ -210,8 +278,8 @@ function abrirModalAjustar(id) {
     
     itemEnAjuste = item;
     
-    document.getElementById('ajustar-nombre').value = item.nombre;
-    document.getElementById('ajustar-cantidad-actual').value = `${item.cantidad} ${item.unidad}`;
+    document.getElementById('ajustar-nombre').value = item.nombre || '';
+    document.getElementById('ajustar-cantidad-actual').value = `${item.cantidad || 0} ${item.unidad || ''}`;
     document.getElementById('ajustar-cantidad').value = '';
     
     document.getElementById('modal-ajustar-stock').style.display = 'flex';
@@ -222,7 +290,14 @@ function cerrarModalAjustar() {
     itemEnAjuste = null;
 }
 
-function guardarAjusteStock() {
+async function guardarAjusteStock() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (!itemEnAjuste) return;
     
     const operacion = document.getElementById('ajustar-operacion').value;
@@ -233,43 +308,81 @@ function guardarAjusteStock() {
         return;
     }
     
-    const index = materiaPrima.findIndex(i => i.id === itemEnAjuste.id);
-    if (index === -1) return;
-    
+    const cantidadActual = Number(itemEnAjuste.cantidad) || 0;
     let nuevaCantidad;
+    
     switch(operacion) {
         case 'sumar':
-            nuevaCantidad = materiaPrima[index].cantidad + cantidadAjuste;
-            mostrarNotificacion(`Stock agregado: +${cantidadAjuste}`, 'exito');
+            nuevaCantidad = cantidadActual + cantidadAjuste;
             break;
         case 'restar':
-            if (materiaPrima[index].cantidad < cantidadAjuste) {
+            if (cantidadActual < cantidadAjuste) {
                 mostrarNotificacion('No hay suficiente stock', 'error');
                 return;
             }
-            nuevaCantidad = materiaPrima[index].cantidad - cantidadAjuste;
-            mostrarNotificacion(`Stock consumido: -${cantidadAjuste}`, 'info');
+            nuevaCantidad = cantidadActual - cantidadAjuste;
             break;
         case 'actualizar':
             nuevaCantidad = cantidadAjuste;
-            mostrarNotificacion('Stock actualizado', 'exito');
             break;
         default:
             return;
     }
     
-    materiaPrima[index].cantidad = nuevaCantidad;
-    guardarMateriaPrima();
-    cerrarModalAjustar();
-    
-    // Actualizar vista
-    const tablaBody = document.getElementById('materia-prima-body');
-    if (tablaBody) {
-        tablaBody.innerHTML = renderizarMateriaPrima();
+    try {
+        const { data, error } = await client
+            .from('materia_prima')
+            .update({ cantidad: nuevaCantidad })
+            .eq('id', itemEnAjuste.id)
+            .select();
+        
+        if (error) {
+            console.error('Error actualizando stock:', error);
+            mostrarNotificacion('Error al actualizar stock', 'error');
+            return;
+        }
+        
+        // Actualizar lista local
+        const index = materiaPrima.findIndex(i => i.id === itemEnAjuste.id);
+        if (index !== -1 && data && data[0]) {
+            materiaPrima[index] = {
+                ...data[0],
+                cantidad: Number(data[0].cantidad) || 0,
+                precioUnitario: Number(data[0].precio_unitario) || 0
+            };
+        }
+        
+        cerrarModalAjustar();
+        
+        // Actualizar vista
+        const tablaBody = document.getElementById('materia-prima-body');
+        if (tablaBody) {
+            tablaBody.innerHTML = renderizarMateriaPrima();
+        }
+        
+        // Actualizar total
+        actualizarTotalMateriaPrima();
+        
+        let mensaje = '';
+        if (operacion === 'sumar') mensaje = `Stock agregado: +${cantidadAjuste}`;
+        else if (operacion === 'restar') mensaje = `Stock consumido: -${cantidadAjuste}`;
+        else mensaje = 'Stock actualizado';
+        
+        mostrarNotificacion(mensaje, 'exito');
+    } catch (e) {
+        console.error('Error actualizando stock:', e);
+        mostrarNotificacion('Error al actualizar stock', 'error');
     }
 }
 
-function guardarMateriaPrimaItem() {
+async function guardarMateriaPrimaItem() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     const nombre = document.getElementById('mp-nombre').value;
     const cantidad = parseFloat(document.getElementById('mp-cantidad').value);
     const unidad = document.getElementById('mp-unidad').value;
@@ -277,59 +390,180 @@ function guardarMateriaPrimaItem() {
     const proveedor = document.getElementById('mp-proveedor').value;
     const fecha = document.getElementById('mp-fecha').value;
     
-    if (!nombre || !cantidad || !precio || !proveedor || !fecha) {
+    if (!nombre || isNaN(cantidad) || isNaN(precio) || !proveedor || !fecha) {
         mostrarNotificacion('Completa todos los campos', 'error');
         return;
     }
     
-    const nuevoId = materiaPrima.length > 0 ? Math.max(...materiaPrima.map(i => i.id)) + 1 : 1;
-    
-    materiaPrima.push({
-        id: nuevoId,
+    const nuevoItem = {
         nombre: nombre,
         cantidad: cantidad,
         unidad: unidad,
-        precioUnitario: precio,
+        precio_unitario: precio,
         proveedor: proveedor,
-        fechaCompra: fecha
-    });
+        fecha_compra: fecha
+    };
     
-    guardarMateriaPrima();
-    
-    // Limpiar formulario
-    document.getElementById('mp-nombre').value = '';
-    document.getElementById('mp-cantidad').value = '';
-    document.getElementById('mp-precio').value = '';
-    document.getElementById('mp-proveedor').value = '';
-    
-    // Actualizar vista
-    const tablaBody = document.getElementById('materia-prima-body');
-    if (tablaBody) {
-        tablaBody.innerHTML = renderizarMateriaPrima();
+    try {
+        const { data, error } = await client
+            .from('materia_prima')
+            .insert([nuevoItem])
+            .select();
+        
+        if (error) {
+            console.error('Error guardando materia prima:', error);
+            mostrarNotificacion('Error al guardar', 'error');
+            return;
+        }
+        
+        // Agregar a lista local
+        if (data && data[0]) {
+            materiaPrima.push({
+                ...data[0],
+                cantidad: Number(data[0].cantidad) || 0,
+                precioUnitario: Number(data[0].precio_unitario) || 0
+            });
+        }
+        
+        // Limpiar formulario
+        document.getElementById('mp-nombre').value = '';
+        document.getElementById('mp-cantidad').value = '';
+        document.getElementById('mp-precio').value = '';
+        document.getElementById('mp-proveedor').value = '';
+        
+        // Actualizar vista
+        const tablaBody = document.getElementById('materia-prima-body');
+        if (tablaBody) {
+            tablaBody.innerHTML = renderizarMateriaPrima();
+        }
+        
+        actualizarTotalMateriaPrima();
+        actualizarTarjetasResumen();
+        
+        mostrarNotificacion('Materia prima agregada', 'exito');
+    } catch (e) {
+        console.error('Error guardando materia prima:', e);
+        mostrarNotificacion('Error al guardar', 'error');
     }
-    
-    mostrarNotificacion('Materia prima agregada', 'exito');
 }
 
-function eliminarMateriaPrima(id) {
+async function eliminarMateriaPrima(id) {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (confirm('¿Eliminar este item del inventario?')) {
-        const index = materiaPrima.findIndex(i => i.id === id);
-        if (index !== -1) {
-            materiaPrima.splice(index, 1);
-            guardarMateriaPrima();
+        try {
+            const { error } = await client
+                .from('materia_prima')
+                .delete()
+                .eq('id', id);
+            
+            if (error) {
+                console.error('Error eliminando:', error);
+                mostrarNotificacion('Error al eliminar', 'error');
+                return;
+            }
+            
+            // Actualizar lista local
+            const index = materiaPrima.findIndex(i => i.id === id);
+            if (index !== -1) {
+                materiaPrima.splice(index, 1);
+            }
             
             const tablaBody = document.getElementById('materia-prima-body');
             if (tablaBody) {
                 tablaBody.innerHTML = renderizarMateriaPrima();
             }
             
+            actualizarTotalMateriaPrima();
+            actualizarTarjetasResumen();
+            
             mostrarNotificacion('Item eliminado', 'info');
+        } catch (e) {
+            console.error('Error eliminando:', e);
+            mostrarNotificacion('Error al eliminar', 'error');
         }
     }
 }
 
+function actualizarTotalMateriaPrima() {
+    const totalInvertido = calcularTotalInvertido();
+    const tfoot = document.querySelector('#materia-prima-body')?.closest('table')?.querySelector('tfoot td:last-child');
+    if (tfoot) {
+        const td = tfoot.closest('tr')?.querySelector('td:nth-child(2)');
+        if (td) {
+            td.textContent = formatearMoneda(totalInvertido);
+        }
+    }
+}
+
+function actualizarTarjetasResumen() {
+    // Esta función actualizaría las tarjetas de resumen si es necesario
+    // Por ahora no se implementa para mantener simple
+}
+
+async function sincronizarMateriaPrima() {
+    await cargarMateriaPrima();
+    
+    const moduloMateriaPrima = document.getElementById('materia-prima');
+    if (moduloMateriaPrima && moduloMateriaPrima.classList.contains('active')) {
+        moduloMateriaPrima.innerHTML = await mostrarMateriaPrima();
+    }
+    
+    mostrarNotificacion('Materia prima sincronizada con Supabase', 'exito');
+}
+
+function exportarMateriaPrimaCSV() {
+    if (materiaPrima.length === 0) {
+        mostrarNotificacion('No hay datos para exportar', 'error');
+        return;
+    }
+    
+    let csv = 'Producto,Cantidad,Unidad,Precio Unitario,Total,Proveedor,Fecha Compra\n';
+    
+    materiaPrima.forEach(item => {
+        const total = (Number(item.cantidad) || 0) * (Number(item.precioUnitario) || 0);
+        csv += `"${item.nombre || ''}",${item.cantidad || 0},${item.unidad || ''},${item.precioUnitario || 0},${total},"${item.proveedor || ''}",${item.fecha_compra || ''}\n`;
+    });
+    
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `materia_prima_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    mostrarNotificacion('Archivo exportado correctamente', 'exito');
+}
+
+// Función para obtener el total invertido en materia prima (usada por otros módulos)
+async function obtenerTotalInvertidoMateriaPrima() {
+    await cargarMateriaPrima();
+    return calcularTotalInvertido();
+}
+
 // Inicializar
-cargarMateriaPrima();
+(async function inicializar() {
+    let intentos = 0;
+    const maxIntentos = 50;
+    
+    while (!window.supabaseClient?.isReady() && intentos < maxIntentos) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        intentos++;
+    }
+    
+    if (window.supabaseClient?.isReady()) {
+        await cargarMateriaPrima();
+        console.log('✅ Módulo de Materia Prima inicializado con Supabase');
+    } else {
+        console.error('❌ No se pudo conectar con Supabase');
+    }
+})();
 
 // Exponer funciones
 window.mostrarMateriaPrima = mostrarMateriaPrima;
@@ -338,5 +572,8 @@ window.eliminarMateriaPrima = eliminarMateriaPrima;
 window.abrirModalAjustar = abrirModalAjustar;
 window.cerrarModalAjustar = cerrarModalAjustar;
 window.guardarAjusteStock = guardarAjusteStock;
+window.sincronizarMateriaPrima = sincronizarMateriaPrima;
+window.exportarMateriaPrimaCSV = exportarMateriaPrimaCSV;
+window.obtenerTotalInvertidoMateriaPrima = obtenerTotalInvertidoMateriaPrima;
 
-console.log('📦 Módulo de Materia Prima cargado');
+console.log('📦 Módulo de Materia Prima (Supabase) cargado correctamente');

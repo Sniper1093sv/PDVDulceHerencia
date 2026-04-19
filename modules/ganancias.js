@@ -1,4 +1,4 @@
-// modules/ganancias.js - Cálculo de ganancias y metas con inversiones editables
+// modules/ganancias.js - Cálculo de ganancias y metas con Supabase
 
 // Variables para las metas (valores por defecto)
 let metas = {
@@ -7,115 +7,217 @@ let metas = {
     mensual: 2500
 };
 
-// Variable para inversiones editables
+// Variable para inversiones
 let inversiones = [];
 
-// Cargar metas de localStorage
-function cargarMetas() {
-    const metasGuardadas = localStorage.getItem('metas');
-    if (metasGuardadas) {
-        try {
-            metas = JSON.parse(metasGuardadas);
-        } catch (e) {
-            console.error('Error cargando metas:', e);
-            metas = { diaria: 100, quincenal: 1500, mensual: 2500 };
+// Cargar metas desde Supabase
+async function cargarMetas() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        return;
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('metas')
+            .select('*')
+            .eq('id', 1)
+            .single();
+        
+        if (error) {
+            console.error('Error cargando metas:', error);
+            return;
         }
-    } else {
-        // Si no hay metas guardadas, establecer los valores por defecto
-        metas = {
-            diaria: 100,
-            quincenal: 1500,
-            mensual: 2500
-        };
-        guardarMetas();
+        
+        if (data) {
+            metas = {
+                diaria: Number(data.diaria) || 100,
+                quincenal: Number(data.quincenal) || 1500,
+                mensual: Number(data.mensual) || 2500
+            };
+        }
+        
+        console.log('✅ Metas cargadas desde Supabase');
+    } catch (e) {
+        console.error('Error cargando metas:', e);
     }
 }
 
-function guardarMetas() {
-    localStorage.setItem('metas', JSON.stringify(metas));
+// Guardar metas en Supabase
+async function guardarMetas() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        return;
+    }
+    
+    try {
+        const { error } = await client
+            .from('metas')
+            .upsert({
+                id: 1,
+                diaria: metas.diaria,
+                quincenal: metas.quincenal,
+                mensual: metas.mensual,
+                updated_at: new Date()
+            });
+        
+        if (error) {
+            console.error('Error guardando metas:', error);
+        }
+    } catch (e) {
+        console.error('Error guardando metas:', e);
+    }
 }
 
-// Cargar inversiones
+// Cargar inversiones desde Supabase
 async function cargarInversiones() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        inversiones = [];
+        return;
+    }
+    
     try {
-        if (window.obtenerDatos) {
-            inversiones = await window.obtenerDatos('inversiones') || [];
-        } else {
-            // Fallback a localStorage
-            const invData = localStorage.getItem('inversiones');
-            inversiones = invData ? JSON.parse(invData) : [];
+        const { data, error } = await client
+            .from('inversiones')
+            .select('*')
+            .order('fecha', { ascending: false });
+        
+        if (error) {
+            console.error('Error cargando inversiones:', error);
+            inversiones = [];
+            return;
         }
-    } catch (error) {
-        console.error('Error cargando inversiones:', error);
+        
+        inversiones = (data || []).map(inv => ({
+            ...inv,
+            monto: Number(inv.monto) || 0
+        }));
+        
+        console.log(`✅ ${inversiones.length} inversiones cargadas desde Supabase`);
+    } catch (e) {
+        console.error('Error cargando inversiones:', e);
         inversiones = [];
     }
 }
 
 // Función para guardar inversión
 async function guardarInversionManual() {
-    const fecha = document.getElementById('inv-fecha').value;
-    const categoria = document.getElementById('inv-categoria').value;
-    const descripcion = document.getElementById('inv-descripcion').value;
-    const monto = parseFloat(document.getElementById('inv-monto').value);
+    const client = window.supabaseClient?.getClient();
     
-    if (!fecha || !monto) {
-        mostrarNotificacion('Completa fecha y monto', 'error');
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
+    const fecha = document.getElementById('inv-fecha')?.value;
+    const categoria = document.getElementById('inv-categoria')?.value;
+    const descripcion = document.getElementById('inv-descripcion')?.value;
+    const monto = parseFloat(document.getElementById('inv-monto')?.value);
+    
+    if (!fecha || !categoria || isNaN(monto)) {
+        mostrarNotificacion('Completa fecha, categoría y monto', 'error');
         return;
     }
     
     const nuevaInversion = {
-        id: Date.now(),
         fecha: fecha,
         categoria: categoria,
-        descripcion: descripcion,
+        descripcion: descripcion || '',
         monto: monto
     };
     
-    if (window.guardarDatos) {
-        await window.guardarDatos('inversiones', nuevaInversion);
-    } else {
-        // Fallback a localStorage
-        inversiones.push(nuevaInversion);
-        localStorage.setItem('inversiones', JSON.stringify(inversiones));
+    try {
+        const { data, error } = await client
+            .from('inversiones')
+            .insert([nuevaInversion])
+            .select();
+        
+        if (error) {
+            console.error('Error guardando inversión:', error);
+            mostrarNotificacion('Error al guardar inversión', 'error');
+            return;
+        }
+        
+        // Agregar a lista local
+        if (data && data[0]) {
+            inversiones.push({
+                ...data[0],
+                monto: Number(data[0].monto) || 0
+            });
+        }
+        
+        // Limpiar campos
+        const fechaInput = document.getElementById('inv-fecha');
+        const categoriaSelect = document.getElementById('inv-categoria');
+        const descripcionInput = document.getElementById('inv-descripcion');
+        const montoInput = document.getElementById('inv-monto');
+        
+        if (fechaInput) fechaInput.value = new Date().toISOString().split('T')[0];
+        if (categoriaSelect) categoriaSelect.value = 'general';
+        if (descripcionInput) descripcionInput.value = '';
+        if (montoInput) montoInput.value = '';
+        
+        actualizarTablaInversiones();
+        
+        // Actualizar vista principal
+        const moduloGanancias = document.getElementById('ganancias');
+        if (moduloGanancias && moduloGanancias.classList.contains('active')) {
+            moduloGanancias.innerHTML = await mostrarGanancias();
+        }
+        
+        mostrarNotificacion('Inversión guardada', 'exito');
+    } catch (e) {
+        console.error('Error guardando inversión:', e);
+        mostrarNotificacion('Error al guardar inversión', 'error');
     }
-    
-    // Limpiar campos
-    document.getElementById('inv-fecha').value = new Date().toISOString().split('T')[0];
-    document.getElementById('inv-categoria').value = 'general';
-    document.getElementById('inv-descripcion').value = '';
-    document.getElementById('inv-monto').value = '';
-    
-    await cargarInversiones();
-    actualizarTablaInversiones();
-    
-    // Actualizar vista principal
-    if (document.getElementById('ganancias')?.classList.contains('active')) {
-        document.getElementById('ganancias').innerHTML = mostrarGanancias();
-    }
-    
-    mostrarNotificacion('Inversión guardada', 'exito');
 }
 
 // Función para eliminar inversión
 async function eliminarInversion(id) {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (confirm('¿Eliminar esta inversión?')) {
-        const index = inversiones.findIndex(i => i.id === id);
-        if (index !== -1) {
-            inversiones.splice(index, 1);
+        try {
+            const { error } = await client
+                .from('inversiones')
+                .delete()
+                .eq('id', id);
             
-            if (window.guardarDatos) {
-                await window.guardarDatos('inversiones', inversiones);
-            } else {
-                localStorage.setItem('inversiones', JSON.stringify(inversiones));
+            if (error) {
+                console.error('Error eliminando inversión:', error);
+                mostrarNotificacion('Error al eliminar', 'error');
+                return;
+            }
+            
+            // Actualizar lista local
+            const index = inversiones.findIndex(i => i.id === id);
+            if (index !== -1) {
+                inversiones.splice(index, 1);
             }
             
             actualizarTablaInversiones();
             
-            if (document.getElementById('ganancias')?.classList.contains('active')) {
-                document.getElementById('ganancias').innerHTML = mostrarGanancias();
+            const moduloGanancias = document.getElementById('ganancias');
+            if (moduloGanancias && moduloGanancias.classList.contains('active')) {
+                moduloGanancias.innerHTML = await mostrarGanancias();
             }
             
             mostrarNotificacion('Inversión eliminada', 'info');
+        } catch (e) {
+            console.error('Error eliminando inversión:', e);
+            mostrarNotificacion('Error al eliminar', 'error');
         }
     }
 }
@@ -124,15 +226,16 @@ async function eliminarInversion(id) {
 function mostrarModalInversiones() {
     const modal = document.getElementById('modal-inversiones');
     if (modal) {
-        cargarInversiones().then(() => {
-            actualizarTablaInversiones();
-            modal.style.display = 'flex';
-        });
+        actualizarTablaInversiones();
+        modal.style.display = 'flex';
     }
 }
 
 function cerrarModalInversiones() {
-    document.getElementById('modal-inversiones').style.display = 'none';
+    const modal = document.getElementById('modal-inversiones');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 function actualizarTablaInversiones() {
@@ -146,7 +249,7 @@ function actualizarTablaInversiones() {
     
     tbody.innerHTML = inversiones.map(inv => `
         <tr>
-            <td>${new Date(inv.fecha).toLocaleDateString('es-ES')}</td>
+            <td>${inv.fecha ? new Date(inv.fecha).toLocaleDateString('es-ES') : ''}</td>
             <td>${inv.categoria || 'General'}</td>
             <td>${inv.descripcion || '-'}</td>
             <td class="negativo">${formatearMoneda(inv.monto || 0)}</td>
@@ -171,10 +274,10 @@ function mostrarModalMetas() {
 }
 
 // Función para guardar las metas
-function guardarMetasConfig() {
-    const diaria = parseFloat(document.getElementById('meta-diaria').value);
-    const quincenal = parseFloat(document.getElementById('meta-quincenal').value);
-    const mensual = parseFloat(document.getElementById('meta-mensual').value);
+async function guardarMetasConfig() {
+    const diaria = parseFloat(document.getElementById('meta-diaria')?.value);
+    const quincenal = parseFloat(document.getElementById('meta-quincenal')?.value);
+    const mensual = parseFloat(document.getElementById('meta-mensual')?.value);
     
     if (isNaN(diaria) || isNaN(quincenal) || isNaN(mensual)) {
         mostrarNotificacion('Ingresa valores válidos', 'error');
@@ -182,22 +285,56 @@ function guardarMetasConfig() {
     }
     
     metas = { diaria, quincenal, mensual };
-    guardarMetas();
+    await guardarMetas();
     cerrarModalMetas();
     
     // Actualizar la vista si estamos en el módulo de ganancias
-    if (document.getElementById('ganancias')?.classList.contains('active')) {
-        document.getElementById('ganancias').innerHTML = mostrarGanancias();
+    const moduloGanancias = document.getElementById('ganancias');
+    if (moduloGanancias && moduloGanancias.classList.contains('active')) {
+        moduloGanancias.innerHTML = await mostrarGanancias();
     }
-    
-    // Disparar evento para que otros módulos se actualicen
-    window.dispatchEvent(new CustomEvent('metasActualizadas', { detail: metas }));
     
     mostrarNotificacion('Metas actualizadas', 'exito');
 }
 
 function cerrarModalMetas() {
-    document.getElementById('modal-metas').style.display = 'none';
+    const modal = document.getElementById('modal-metas');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Obtener ventas desde Supabase
+async function obtenerVentas() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        return [];
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('ventas')
+            .select('*')
+            .order('fecha', { ascending: false });
+        
+        if (error) {
+            console.error('Error obteniendo ventas:', error);
+            return [];
+        }
+        
+        return (data || []).map(v => ({
+            ...v,
+            total: Number(v.total) || 0,
+            unidadesVendidas: Number(v.unidades_vendidas) || 0,
+            cantidad: Number(v.cantidad) || 0,
+            productoId: v.producto_id,
+            productoNombre: v.producto_nombre
+        }));
+    } catch (e) {
+        console.error('Error obteniendo ventas:', e);
+        return [];
+    }
 }
 
 // Función para calcular el progreso de metas
@@ -321,78 +458,13 @@ function renderizarProductosMasVendidos(ventas) {
     `;
 }
 
-// Función para renderizar gráfica de barras
-function renderizarGraficaBarras(ventas) {
-    const ultimos7Dias = [];
-    const hoy = new Date();
-    
-    for (let i = 6; i >= 0; i--) {
-        const fecha = new Date();
-        fecha.setDate(hoy.getDate() - i);
-        const fechaStr = fecha.toISOString().split('T')[0];
-        
-        const ventasDia = ventas.filter(v => v.fecha === fechaStr);
-        const totalDia = ventasDia.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
-        const unidadesDia = ventasDia.reduce((sum, v) => sum + (Number(v.unidadesVendidas) || 0), 0);
-        
-        ultimos7Dias.push({
-            fecha: fecha.toLocaleDateString('es-ES', { weekday: 'short' }),
-            total: totalDia,
-            unidades: unidadesDia
-        });
-    }
-    
-    const maxTotal = Math.max(...ultimos7Dias.map(d => d.total), 1);
-    
-    return ultimos7Dias.map(dia => {
-        const altura = Math.max(1, Math.round((dia.total / maxTotal) * 20));
-        const barra = '█'.repeat(altura);
-        
-        return `<div style="display:flex; align-items:center; margin-bottom: 5px;">
-            <span style="width:50px;">${dia.fecha}:</span>
-            <span style="color: #8B4513;">${barra}</span>
-            <span style="margin-left:10px;">${formatearMoneda(dia.total)} (${dia.unidades} und)</span>
-        </div>`;
-    }).join('');
-}
-
-// Función para renderizar estadísticas de productos
-function renderizarEstadisticasProductos() {
-    const productos = JSON.parse(localStorage.getItem('productos') || '[]');
-    const ventas = JSON.parse(localStorage.getItem('ventas') || '[]');
-    
-    if (productos.length === 0) return '<p>No hay productos registrados</p>';
-    
-    let html = '<table style="width:100%;"><thead><tr><th>Producto</th><th>Unidades Vendidas</th><th>Stock Actual</th><th>Ingresos</th></tr></thead><tbody>';
-    
-    productos.forEach(prod => {
-        const ventasProducto = ventas.filter(v => v.productoId === prod.id);
-        const ingresos = ventasProducto.reduce((sum, v) => sum + (v.total || 0), 0);
-        const unidadesVendidas = ventasProducto.reduce((sum, v) => sum + (v.unidadesVendidas || 0), 0);
-        const stockActual = prod.stock || 0;
-        
-        let stockColor = '#2E7D32';
-        if (stockActual < 20) stockColor = '#C62828';
-        else if (stockActual < 50) stockColor = '#D2691E';
-        
-        html += `
-            <tr>
-                <td><strong>${prod.nombre}</strong></td>
-                <td>${unidadesVendidas}</td>
-                <td style="color: ${stockColor}; font-weight: bold;">${stockActual}</td>
-                <td>${formatearMoneda(ingresos)}</td>
-            </tr>
-        `;
-    });
-    
-    html += '</tbody></table>';
-    return html;
-}
-
 // Función principal para mostrar el módulo de ganancias
-function mostrarGanancias() {
-    // Obtener ventas
-    const ventas = JSON.parse(localStorage.getItem('ventas') || '[]');
+async function mostrarGanancias() {
+    // Cargar datos
+    await cargarMetas();
+    await cargarInversiones();
+    
+    const ventas = await obtenerVentas();
     
     // Calcular progreso de metas
     const progreso = calcularProgresoMetas(ventas);
@@ -418,15 +490,17 @@ function mostrarGanancias() {
     const unidadesMes = ventasMes.reduce((sum, v) => sum + (Number(v.unidadesVendidas) || 0), 0);
     const unidadesTotal = ventas.reduce((sum, v) => sum + (Number(v.unidadesVendidas) || 0), 0);
     
-    // Calcular planilla de empleados
-    const empleados = JSON.parse(localStorage.getItem('empleados') || '[]');
-    const empleadosActivos = empleados.filter(e => e.activo).length;
+    // Obtener empleados activos y costo de planilla
+    let empleadosActivos = 0;
+    if (window.obtenerEmpleadosActivos) {
+        empleadosActivos = await window.obtenerEmpleadosActivos();
+    }
     const costoPlanillaMensual = empleadosActivos * 15 * 30;
     
     // Calcular total de inversiones
     const totalInversiones = inversiones.reduce((sum, inv) => sum + (inv.monto || 0), 0);
     
-    // Calcular ganancia neta (ingresos - inversiones - planilla)
+    // Calcular ganancia neta
     const gananciaNeta = totalGeneral - totalInversiones - costoPlanillaMensual;
     
     return `
@@ -442,6 +516,9 @@ function mostrarGanancias() {
             </button>
             <button class="btn btn-info" onclick="mostrarModalMetas()">
                 ⚙️ Configurar Metas
+            </button>
+            <button class="btn btn-info" onclick="sincronizarGanancias()">
+                🔄 Sincronizar
             </button>
         </div>
         
@@ -551,15 +628,7 @@ function mostrarGanancias() {
             </div>
         </div>
         
-        <!-- Estadísticas por Producto -->
-        <div style="background: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
-            <h3>📦 Estadísticas por Producto</h3>
-            <div style="overflow-x: auto;">
-                ${renderizarEstadisticasProductos()}
-            </div>
-        </div>
-        
-        <!-- Análisis de gastos con inversiones editables -->
+        <!-- Análisis de gastos -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
             <div style="background: white; padding: 1.5rem; border-radius: 10px;">
                 <h3>💰 Análisis Financiero</h3>
@@ -600,10 +669,6 @@ function mostrarGanancias() {
                         <td><strong>${(unidadesTotal / (ventas.length || 1)).toFixed(1)} und</strong></td>
                     </tr>
                     <tr>
-                        <td>Proyección mensual:</td>
-                        <td><strong>${formatearMoneda((totalGeneral / (ventas.length || 1)) * 30)}</strong></td>
-                    </tr>
-                    <tr>
                         <td>Rentabilidad:</td>
                         <td><strong style="color: ${gananciaNeta > 0 ? '#2E7D32' : '#C62828'}">
                             ${((gananciaNeta / (totalGeneral || 1)) * 100).toFixed(1)}%
@@ -622,14 +687,6 @@ function mostrarGanancias() {
             <h3>🥐 Top 5 Productos Más Vendidos</h3>
             <div style="overflow-x: auto;">
                 ${renderizarProductosMasVendidos(ventas)}
-            </div>
-        </div>
-        
-        <!-- Gráfica de tendencia -->
-        <div style="background: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
-            <h3>📊 Tendencia de Ventas (últimos 7 días)</h3>
-            <div style="font-family: monospace; font-size: 14px; line-height: 2;">
-                ${renderizarGraficaBarras(ventas)}
             </div>
         </div>
         
@@ -721,16 +778,37 @@ function mostrarGanancias() {
     `;
 }
 
-// Inicializar metas y cargar inversiones
-cargarMetas();
-cargarInversiones();
-
-// Escuchar eventos de actualización de ventas
-window.addEventListener('ventasActualizadas', function() {
-    if (document.getElementById('ganancias')?.classList.contains('active')) {
-        document.getElementById('ganancias').innerHTML = mostrarGanancias();
+// Función para sincronizar manualmente
+async function sincronizarGanancias() {
+    await cargarMetas();
+    await cargarInversiones();
+    
+    const moduloGanancias = document.getElementById('ganancias');
+    if (moduloGanancias && moduloGanancias.classList.contains('active')) {
+        moduloGanancias.innerHTML = await mostrarGanancias();
     }
-});
+    
+    mostrarNotificacion('Datos sincronizados con Supabase', 'exito');
+}
+
+// Inicializar
+(async function inicializar() {
+    let intentos = 0;
+    const maxIntentos = 50;
+    
+    while (!window.supabaseClient?.isReady() && intentos < maxIntentos) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        intentos++;
+    }
+    
+    if (window.supabaseClient?.isReady()) {
+        await cargarMetas();
+        await cargarInversiones();
+        console.log('✅ Módulo de Ganancias inicializado con Supabase');
+    } else {
+        console.error('❌ No se pudo conectar con Supabase');
+    }
+})();
 
 // Exponer funciones
 window.mostrarGanancias = mostrarGanancias;
@@ -741,5 +819,6 @@ window.mostrarModalInversiones = mostrarModalInversiones;
 window.cerrarModalInversiones = cerrarModalInversiones;
 window.guardarInversionManual = guardarInversionManual;
 window.eliminarInversion = eliminarInversion;
+window.sincronizarGanancias = sincronizarGanancias;
 
-console.log('📊 Módulo de Ganancias con Inversiones Editables cargado');
+console.log('📊 Módulo de Ganancias (Supabase) cargado correctamente');

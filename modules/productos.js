@@ -1,57 +1,39 @@
-// modules/productos.js - Catálogo de productos con presentaciones
+// modules/productos.js - Catálogo de productos con Supabase
 
 let productos = [];
 
-// Cargar productos de localStorage
-function cargarProductos() {
-    const datos = localStorage.getItem('productos');
-    if (datos) {
-        try {
-            productos = JSON.parse(datos);
-        } catch (e) {
-            console.error('Error cargando productos:', e);
+// Cargar productos desde Supabase
+async function cargarProductos() {
+    const client = window.supabaseClient?.getClient();
+    
+    if (!client) {
+        console.error('❌ Cliente Supabase no disponible');
+        productos = [];
+        return;
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('productos')
+            .select('*')
+            .order('id', { ascending: true });
+        
+        if (error) {
+            console.error('Error cargando productos:', error);
             productos = [];
+            return;
         }
-    } else {
-        // Datos de ejemplo
-        productos = [
-            { 
-                id: 1, 
-                nombre: 'Pan Francés', 
-                presentaciones: [
-                    { tipo: 'unidad', precio: 1.50, unidades: 1 },
-                    { tipo: 'bolsa', precio: 7.00, unidades: 5 }
-                ],
-                stock: 100,
-                vendidos: 0
-            },
-            { 
-                id: 2, 
-                nombre: 'Croissant', 
-                presentaciones: [
-                    { tipo: 'unidad', precio: 2.00, unidades: 1 },
-                    { tipo: 'bolsa', precio: 9.00, unidades: 5 }
-                ],
-                stock: 80,
-                vendidos: 0
-            },
-            { 
-                id: 3, 
-                nombre: 'Pan Dulce', 
-                presentaciones: [
-                    { tipo: 'unidad', precio: 3.50, unidades: 1 },
-                    { tipo: 'bolsa', precio: 16.00, unidades: 5 }
-                ],
-                stock: 60,
-                vendidos: 0
-            },
-        ];
-        guardarProductos();
+        
+        productos = data || [];
+        console.log(`✅ ${productos.length} productos cargados desde Supabase`);
+    } catch (e) {
+        console.error('Error cargando productos:', e);
+        productos = [];
     }
 }
 
-function guardarProductos() {
-    localStorage.setItem('productos', JSON.stringify(productos));
+async function guardarProductos() {
+    // Ya no se usa - las operaciones son directas a Supabase
 }
 
 // Función para mostrar el módulo de productos
@@ -100,7 +82,10 @@ function mostrarProductos() {
             </table>
         </div>
         
-        <button class="btn" style="margin-top: 1rem;" onclick="volverAlInicio()">← Volver al Inicio</button>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+            <button class="btn" onclick="volverAlInicio()">← Volver al Inicio</button>
+            <button class="btn btn-info" onclick="sincronizarProductos()">🔄 Sincronizar con Supabase</button>
+        </div>
         
         <!-- Modal para editar producto -->
         <div id="modal-editar" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
@@ -134,21 +119,34 @@ function mostrarProductos() {
 
 function renderizarProductos() {
     if (!productos || productos.length === 0) {
-        return `<tr><td colspan="6" style="text-align: center;">No hay productos registrados</td></tr>`;
+        return `<tr><td colspan="6" style="text-align: center;">Cargando productos desde Supabase...</td></tr>`;
     }
     
     return productos.map((prod) => {
         if (!prod) return '';
         
-        const presentaciones = prod.presentaciones ? prod.presentaciones.map(p => 
-            `${p.tipo === 'unidad' ? '🍞 Unidad' : '📦 Bolsa'}: ${formatearMoneda(p.precio || 0)} (${p.unidades || 1} und)`
-        ).join('<br>') : 'Sin presentaciones';
+        let presentacionesTexto = '';
+        try {
+            const presentaciones = typeof prod.presentaciones === 'string' 
+                ? JSON.parse(prod.presentaciones) 
+                : prod.presentaciones;
+            
+            if (presentaciones && Array.isArray(presentaciones)) {
+                presentacionesTexto = presentaciones.map(p => 
+                    `${p.tipo === 'unidad' ? '🍞 Unidad' : '📦 Bolsa'}: ${formatearMoneda(p.precio || 0)} (${p.unidades || 1} und)`
+                ).join('<br>');
+            } else {
+                presentacionesTexto = 'Sin presentaciones';
+            }
+        } catch (e) {
+            presentacionesTexto = 'Error en datos';
+        }
         
         return `
             <tr>
                 <td>${prod.id || ''}</td>
                 <td><strong>${prod.nombre || ''}</strong></td>
-                <td>${presentaciones}</td>
+                <td>${presentacionesTexto}</td>
                 <td>${prod.stock || 0} unidades</td>
                 <td>${prod.vendidos || 0} unidades</td>
                 <td>
@@ -164,7 +162,13 @@ function renderizarProductos() {
     }).join('');
 }
 
-function guardarProducto() {
+async function guardarProducto() {
+    const client = window.supabaseClient?.getClient();
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     const nombre = document.getElementById('nombre-producto').value;
     const precioUnidad = parseFloat(document.getElementById('precio-unidad').value);
     const precioBolsa = document.getElementById('precio-bolsa').value;
@@ -173,8 +177,6 @@ function guardarProducto() {
         mostrarNotificacion('Completa al menos el nombre y precio por unidad', 'error');
         return;
     }
-    
-    const nuevoId = productos.length > 0 ? Math.max(...productos.map(p => p.id || 0)) + 1 : 1;
     
     const presentaciones = [
         { tipo: 'unidad', precio: precioUnidad, unidades: 1 }
@@ -188,22 +190,41 @@ function guardarProducto() {
         });
     }
     
-    productos.push({
-        id: nuevoId,
+    const nuevoProducto = {
         nombre: nombre,
         presentaciones: presentaciones,
         stock: 100,
         vendidos: 0
-    });
+    };
     
-    guardarProductos();
-    
-    document.getElementById('nombre-producto').value = '';
-    document.getElementById('precio-unidad').value = '';
-    document.getElementById('precio-bolsa').value = '';
-    
-    actualizarVistaProductos();
-    mostrarNotificacion('Producto agregado correctamente', 'exito');
+    try {
+        const { data, error } = await client
+            .from('productos')
+            .insert([nuevoProducto])
+            .select();
+        
+        if (error) {
+            console.error('Error guardando producto:', error);
+            mostrarNotificacion('Error al guardar producto', 'error');
+            return;
+        }
+        
+        // Actualizar lista local
+        if (data && data[0]) {
+            productos.push(data[0]);
+        }
+        
+        // Limpiar formulario
+        document.getElementById('nombre-producto').value = '';
+        document.getElementById('precio-unidad').value = '';
+        document.getElementById('precio-bolsa').value = '';
+        
+        actualizarVistaProductos();
+        mostrarNotificacion('Producto agregado correctamente', 'exito');
+    } catch (e) {
+        console.error('Error guardando producto:', e);
+        mostrarNotificacion('Error al guardar producto', 'error');
+    }
 }
 
 // Variables para el modal de edición
@@ -218,8 +239,17 @@ function abrirModalEditar(productoId) {
     document.getElementById('editar-id').value = producto.id;
     document.getElementById('editar-nombre').value = producto.nombre || '';
     
-    const unidad = producto.presentaciones ? producto.presentaciones.find(p => p && p.tipo === 'unidad') : null;
-    const bolsa = producto.presentaciones ? producto.presentaciones.find(p => p && p.tipo === 'bolsa') : null;
+    let presentaciones = producto.presentaciones;
+    try {
+        if (typeof presentaciones === 'string') {
+            presentaciones = JSON.parse(presentaciones);
+        }
+    } catch (e) {
+        presentaciones = [];
+    }
+    
+    const unidad = presentaciones ? presentaciones.find(p => p && p.tipo === 'unidad') : null;
+    const bolsa = presentaciones ? presentaciones.find(p => p && p.tipo === 'bolsa') : null;
     
     document.getElementById('editar-precio-unidad').value = unidad ? unidad.precio : '';
     document.getElementById('editar-precio-bolsa').value = bolsa ? bolsa.precio : '';
@@ -233,9 +263,16 @@ function cerrarModalEditar() {
     productoEnEdicion = null;
 }
 
-function guardarEdicion() {
+async function guardarEdicion() {
+    const client = window.supabaseClient?.getClient();
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (!productoEnEdicion) return;
     
+    const id = parseInt(document.getElementById('editar-id').value);
     const nombre = document.getElementById('editar-nombre').value;
     const precioUnidad = parseFloat(document.getElementById('editar-precio-unidad').value);
     const precioBolsa = document.getElementById('editar-precio-bolsa').value;
@@ -258,31 +295,77 @@ function guardarEdicion() {
         });
     }
     
-    const index = productos.findIndex(p => p && p.id === productoEnEdicion.id);
-    if (index !== -1) {
-        productos[index] = {
-            ...productos[index],
-            nombre: nombre,
-            presentaciones: presentaciones,
-            stock: stock
-        };
-        guardarProductos();
+    try {
+        const { data, error } = await client
+            .from('productos')
+            .update({
+                nombre: nombre,
+                presentaciones: presentaciones,
+                stock: stock
+            })
+            .eq('id', id)
+            .select();
+        
+        if (error) {
+            console.error('Error actualizando producto:', error);
+            mostrarNotificacion('Error al actualizar producto', 'error');
+            return;
+        }
+        
+        // Actualizar lista local
+        const index = productos.findIndex(p => p && p.id === id);
+        if (index !== -1 && data && data[0]) {
+            productos[index] = data[0];
+        }
+        
         actualizarVistaProductos();
         cerrarModalEditar();
         mostrarNotificacion('Producto actualizado', 'exito');
+    } catch (e) {
+        console.error('Error actualizando producto:', e);
+        mostrarNotificacion('Error al actualizar producto', 'error');
     }
 }
 
-function eliminarProducto(id) {
+async function eliminarProducto(id) {
+    const client = window.supabaseClient?.getClient();
+    if (!client) {
+        mostrarNotificacion('Error: Cliente Supabase no disponible', 'error');
+        return;
+    }
+    
     if (confirm('¿Eliminar este producto?')) {
-        const index = productos.findIndex(p => p && p.id === id);
-        if (index !== -1) {
-            productos.splice(index, 1);
-            guardarProductos();
+        try {
+            const { error } = await client
+                .from('productos')
+                .delete()
+                .eq('id', id);
+            
+            if (error) {
+                console.error('Error eliminando producto:', error);
+                mostrarNotificacion('Error al eliminar producto', 'error');
+                return;
+            }
+            
+            // Actualizar lista local
+            const index = productos.findIndex(p => p && p.id === id);
+            if (index !== -1) {
+                productos.splice(index, 1);
+            }
+            
             actualizarVistaProductos();
             mostrarNotificacion('Producto eliminado', 'info');
+        } catch (e) {
+            console.error('Error eliminando producto:', e);
+            mostrarNotificacion('Error al eliminar producto', 'error');
         }
     }
+}
+
+async function sincronizarProductos() {
+    await cargarProductos();
+    actualizarVistaProductos();
+    mostrarNotificacion('Productos sincronizados con Supabase', 'exito');
 }
 
 function actualizarVistaProductos() {
@@ -295,34 +378,96 @@ function actualizarVistaProductos() {
 // Función para obtener precio de producto según presentación
 function obtenerPrecioProducto(productoId, tipo = 'unidad') {
     const producto = productos.find(p => p && p.id === productoId);
-    if (!producto || !producto.presentaciones) return 0;
-    const presentacion = producto.presentaciones.find(p => p && p.tipo === tipo);
+    if (!producto) return 0;
+    
+    let presentaciones = producto.presentaciones;
+    try {
+        if (typeof presentaciones === 'string') {
+            presentaciones = JSON.parse(presentaciones);
+        }
+    } catch (e) {
+        return 0;
+    }
+    
+    const presentacion = presentaciones ? presentaciones.find(p => p && p.tipo === tipo) : null;
     return presentacion ? presentacion.precio || 0 : 0;
 }
 
 // Función para actualizar stock y vendidos
-function registrarVentaProducto(productoId, tipo, cantidadVendida) {
-    const index = productos.findIndex(p => p && p.id === productoId);
-    if (index === -1) return false;
+async function registrarVentaProducto(productoId, tipo, cantidadVendida) {
+    const client = window.supabaseClient?.getClient();
+    if (!client) return false;
     
-    const producto = productos[index];
-    if (!producto.presentaciones) return false;
+    const producto = productos.find(p => p && p.id === productoId);
+    if (!producto) return false;
     
-    const presentacion = producto.presentaciones.find(p => p && p.tipo === tipo);
+    let presentaciones = producto.presentaciones;
+    try {
+        if (typeof presentaciones === 'string') {
+            presentaciones = JSON.parse(presentaciones);
+        }
+    } catch (e) {
+        return false;
+    }
     
+    const presentacion = presentaciones ? presentaciones.find(p => p && p.tipo === tipo) : null;
     if (!presentacion) return false;
     
     const unidadesVendidas = (presentacion.unidades || 1) * cantidadVendida;
+    const nuevoStock = (producto.stock || 0) - unidadesVendidas;
+    const nuevosVendidos = (producto.vendidos || 0) + unidadesVendidas;
     
-    productos[index].stock = (productos[index].stock || 0) - unidadesVendidas;
-    productos[index].vendidos = (productos[index].vendidos || 0) + unidadesVendidas;
-    
-    guardarProductos();
-    return true;
+    try {
+        const { data, error } = await client
+            .from('productos')
+            .update({
+                stock: nuevoStock,
+                vendidos: nuevosVendidos
+            })
+            .eq('id', productoId)
+            .select();
+        
+        if (error) {
+            console.error('Error actualizando stock:', error);
+            return false;
+        }
+        
+        // Actualizar lista local
+        const index = productos.findIndex(p => p && p.id === productoId);
+        if (index !== -1 && data && data[0]) {
+            productos[index] = data[0];
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Error registrando venta:', e);
+        return false;
+    }
 }
 
-// Inicializar
-cargarProductos();
+// Función para obtener todos los productos
+function obtenerProductos() {
+    return productos;
+}
+
+// Inicializar - cargar productos al iniciar
+(async function inicializar() {
+    // Esperar a que Supabase esté listo
+    let intentos = 0;
+    const maxIntentos = 50;
+    
+    while (!window.supabaseClient?.isReady() && intentos < maxIntentos) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        intentos++;
+    }
+    
+    if (window.supabaseClient?.isReady()) {
+        await cargarProductos();
+        console.log('✅ Módulo de Productos inicializado con Supabase');
+    } else {
+        console.error('❌ No se pudo conectar con Supabase');
+    }
+})();
 
 // Exponer funciones
 window.mostrarProductos = mostrarProductos;
@@ -331,8 +476,9 @@ window.eliminarProducto = eliminarProducto;
 window.abrirModalEditar = abrirModalEditar;
 window.cerrarModalEditar = cerrarModalEditar;
 window.guardarEdicion = guardarEdicion;
-window.obtenerProductos = () => productos;
+window.obtenerProductos = obtenerProductos;
 window.obtenerPrecioProducto = obtenerPrecioProducto;
 window.registrarVentaProducto = registrarVentaProducto;
+window.sincronizarProductos = sincronizarProductos;
 
-console.log('🥐 Módulo de Productos cargado correctamente');
+console.log('🥐 Módulo de Productos (Supabase) cargado correctamente');
